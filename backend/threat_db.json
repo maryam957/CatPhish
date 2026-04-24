@@ -1,0 +1,14 @@
+[
+  {
+    "prefix": "3c5b0d9f4e2a8c7f",
+    "fullHash": "3c5b0d9f4e2a8c7f9e1b2d8f4a5c6e7d8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c",
+    "source": "PhishTank",
+    "addedAt": 0
+  },
+  {
+    "prefix": "a1b2c3d4e5f60718",
+    "fullHash": "a1b2c3d4e5f607182839405162738495a6b7c8d9e0f1a2b3c4d5e6f708192a3b4",
+    "source": "OpenPhish",
+    "addedAt": 0
+  }
+]

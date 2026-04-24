@@ -1,0 +1,19 @@
+{
+  "name": "catphish-backend",
+  "version": "1.1.0",
+  "description": "CatPhish backend — threat intel feed, community reports, JWT auth",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "CATPHISH_DEMO_MODE=true node --watch backend/server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "helmet": "^7.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

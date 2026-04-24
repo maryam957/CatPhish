@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none';" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CatPhish — Dangerous site blocked</title>
+  <link rel="stylesheet" href="block.css" />
+</head>
+<body>
+  <main class="shell">
+    <div class="shield-icon">&#128737;</div>
+    <h1>Dangerous site blocked</h1>
+    <p class="sub">
+      CatPhish prevented you from visiting this page because it was identified
+      as a <strong id="reasonLabel">phishing or malicious</strong> site.
+    </p>
+
+    <div class="detail-box">
+      <div class="detail-row">
+        <span class="detail-key">Risk score</span>
+        <span id="riskScore" class="detail-val">&#8212;</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">Detected by</span>
+        <span id="sources" class="detail-val">&#8212;</span>
+      </div>
+      <div class="detail-row">
+        <span class="detail-key">URL hash prefix</span>
+        <span id="hashPrefix" class="detail-val mono">&#8212;</span>
+      </div>
+    </div>
+
+    <p class="info-text">
+      Your full URL was <strong>never</strong> sent to any server.
+      CatPhish uses a SHA-256 hash prefix (K-anonymity) so your browsing history
+      stays private even when checking against threat feeds.
+    </p>
+
+    <div class="actions">
+      <button id="goHomeBtn"  class="btn btn-safe">&#8962; Go to New Tab</button>
+      <button id="goBackBtn"  class="btn btn-back">&#8592; Go back</button>
+      <button id="proceedBtn" class="btn btn-danger">Proceed anyway (unsafe)</button>
+    </div>
+
+    <p id="proceedWarning" class="warn-text" hidden>
+      If you proceed, CatPhish cannot protect you on this page.
+      Only continue if you are absolutely certain this site is safe.
+    </p>
+    <button id="confirmProceedBtn" class="btn btn-confirm-danger" hidden>
+      I understand the risk &#8212; proceed to site
+    </button>
+  </main>
+  <script src="block.js"></script>
+</body>
+</html>

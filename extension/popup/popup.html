@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      SECURITY: this CSP is more strict than the extension-page default.
+      - script-src 'self'  => no inline scripts, no remote scripts
+      - style-src  'self'  => no inline <style> outside popup.css
+      - img-src    'self' data:  => inline SVG data URIs for the meter are OK
+      - object-src 'none', base-uri 'none' => kill <object>/<embed>/<base>
+      - frame-src  'self' blob: => only our own frames
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-src 'self' blob:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CatPhish Dashboard</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+
+      <!-- ================= HEADER ================= -->
+      <header class="hero">
+        <div class="hero-top">
+          <p class="eyebrow">CatPhish</p>
+          <button id="settingsBtn" class="icon-btn" title="Open settings" aria-label="Open settings">
+            &#9881;
+          </button>
+        </div>
+        <h1 id="verdictLabel">Analyzing&hellip;</h1>
+        <p id="pageMeta" class="meta">Waiting for a page snapshot.</p>
+      </header>
+
+      <!-- ================= RISK METER ================= -->
+      <section class="panel meter-panel" aria-labelledby="meterTitle">
+        <div class="panel-heading">
+          <h2 id="meterTitle">Risk score</h2>
+          <span id="riskBadge" class="badge">&mdash;</span>
+        </div>
+        <!-- SVG meter. Populated by popup.js, never by innerHTML. -->
+        <svg id="riskMeter" viewBox="0 0 200 110" class="meter" aria-hidden="true">
+          <path class="meter-track" d="M10,100 A90,90 0 0 1 190,100" stroke-width="12" fill="none"></path>
+          <path id="meterFill" class="meter-fill" d="M10,100 A90,90 0 0 1 190,100" stroke-width="12" fill="none"
+            stroke-dasharray="0 283" pathLength="283"></path>
+          <text id="meterValue" x="100" y="92" text-anchor="middle" class="meter-text">0%</text>
+        </svg>
+        <p id="meterSubtext" class="meta">No verdict yet.</p>
+      </section>
+
+      <!-- ================= STATS ================= -->
+      <section class="panel" aria-labelledby="statsTitle">
+        <div class="panel-heading">
+          <h2 id="statsTitle">What we found</h2>
+        </div>
+        <dl class="stats">
+          <div>
+            <dt>Login forms</dt>
+            <dd id="loginFormCount">0</dd>
+          </div>
+          <div>
+            <dt>Hidden iframes</dt>
+            <dd id="hiddenIframeCount">0</dd>
+          </div>
+          <div>
+            <dt>Suspicious scripts</dt>
+            <dd id="suspiciousScriptCount">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <!-- ================= REASONS ================= -->
+      <section class="panel" aria-labelledby="factorsTitle">
+        <div class="panel-heading">
+          <h2 id="factorsTitle">Why this score</h2>
+          <span class="note">Text only, no HTML</span>
+        </div>
+        <ul id="riskFactorList" class="risk-list">
+          <li class="risk-item empty">No risk factors recorded.</li>
+        </ul>
+      </section>
+
+      <!-- ================= MALICIOUS JS ================= -->
+      <section class="panel" aria-labelledby="jsTitle">
+        <div class="panel-heading">
+          <h2 id="jsTitle">Malicious-JS detections</h2>
+        </div>
+        <ul id="jsHitList" class="risk-list">
+          <li class="risk-item empty">No malicious script signatures matched.</li>
+        </ul>
+      </section>
+
+      <!-- ================= ACTIONS ================= -->
+      <section class="panel actions-panel">
+        <button id="reportBtn" class="btn btn-danger" disabled>Report this site as phishing</button>
+        <p id="reportStatus" class="meta" role="status"></p>
+      </section>
+
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

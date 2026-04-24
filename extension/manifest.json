@@ -1,0 +1,70 @@
+{
+  "manifest_version": 3,
+  "name": "CatPhish",
+  "version": "1.1.0",
+  "description": "Real-time phishing and malicious-JS protection with privacy-preserving URL checking and community reporting.",
+
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "alarms",
+    "notifications"
+  ],
+
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "CatPhish — Risk Dashboard",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "content/dom_analyzer.js",
+        "content/warning_banner.js",
+        "content/content_script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "block/block.html",
+        "block/block.css",
+        "block/block.js",
+        "icons/icon48.png",
+        "icons/icon128.png"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-src 'self' blob:; connect-src 'self' https://api.catphish.local;"
+  }
+}

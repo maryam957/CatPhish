@@ -1,0 +1,7 @@
+node_modules/
+.env
+backend/audit_log.jsonl
+*.log
+
+.env
+node_modules/

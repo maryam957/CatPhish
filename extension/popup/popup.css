@@ -1,0 +1,185 @@
+:root {
+  color-scheme: dark;
+  --bg: #09111f;
+  --panel: rgba(12, 20, 35, 0.92);
+  --panel-border: rgba(141, 172, 255, 0.18);
+  --text: #f3f7ff;
+  --muted: #9db0d1;
+  --accent: #7dd3fc;
+  --accent-strong: #38bdf8;
+  --danger: #fb7185;
+  --danger-strong: #dc2626;
+  --warning: #fbbf24;
+  --ok: #34d399;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  width: 380px;
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.15), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(251, 113, 133, 0.12), transparent 30%),
+    var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Trebuchet MS', sans-serif;
+}
+
+body { padding: 14px; }
+
+.shell { display: grid; gap: 12px; }
+
+.hero, .panel {
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.24);
+  padding: 14px;
+}
+
+.hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+h1, h2, p, dl, dd { margin: 0; }
+
+h1 { font-size: 1.35rem; line-height: 1.2; margin-top: 8px; }
+h2 { font-size: 0.95rem; }
+
+.meta, .note, .risk-message, .risk-evidence { color: var(--muted); font-size: 0.85rem; }
+.meta { margin-top: 6px; line-height: 1.45; }
+
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  background: rgba(125, 211, 252, 0.12);
+  color: var(--accent);
+}
+.badge.badge-ok      { background: rgba(52, 211, 153, 0.18); color: var(--ok); }
+.badge.badge-warn    { background: rgba(251, 191, 36, 0.18); color: var(--warning); }
+.badge.badge-danger  { background: rgba(220, 38, 38, 0.22);  color: #ffb4b4; }
+
+.icon-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text);
+  font-size: 18px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.icon-btn:hover { background: rgba(255,255,255,0.1); }
+
+/* ======================= Risk meter SVG ======================= */
+.meter {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  margin: 6px auto 0;
+  height: auto;
+}
+.meter-track { stroke: rgba(255, 255, 255, 0.08); stroke-linecap: round; }
+.meter-fill  { stroke: var(--ok); stroke-linecap: round; transition: stroke-dasharray 0.5s ease, stroke 0.4s ease; }
+.meter-text {
+  font: 700 22px 'Segoe UI', sans-serif;
+  fill: var(--text);
+}
+
+/* ======================= Stats grid ======================= */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.stats div {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.stats dt {
+  font-size: 0.68rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.stats dd { margin-top: 4px; font-size: 1.1rem; font-weight: 700; }
+
+/* ======================= Risk factor list ======================= */
+.risk-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+  margin: 0;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.risk-item {
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.risk-item.empty { color: var(--muted); font-style: italic; }
+
+.risk-title {
+  margin-bottom: 4px;
+  font-size: 0.74rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.risk-title.sev-HIGH    { color: #ffb4b4; }
+.risk-title.sev-MEDIUM  { color: var(--warning); }
+.risk-title.sev-LOW,
+.risk-title.sev-info    { color: var(--muted); }
+
+.risk-message { line-height: 1.45; font-size: 0.85rem; }
+.risk-evidence { margin-top: 6px; font-size: 0.78rem; word-break: break-word; }
+
+/* ======================= Actions ======================= */
+.actions-panel {
+  display: grid;
+  gap: 8px;
+}
+.btn {
+  font: inherit;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-danger {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  color: #fff;
+}
+.btn-danger:not(:disabled):hover { filter: brightness(1.08); }
