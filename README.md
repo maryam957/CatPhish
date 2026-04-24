@@ -96,25 +96,50 @@ npm install
 
 ### Configure
 ```bash
-# Generate secrets (do this once, save them somewhere safe)
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-# Run it 3 times, use the outputs for the 3 vars below
+# Automatic (recommended):
+# npm start now runs backend/start.js, which auto-generates and stores
+# CATPHISH_JWT_SECRET, CATPHISH_AUDIT_KEY, and CATPHISH_REPORT_SECRET in:
+#   backend/.secrets.json
+# on first run, then reuses them on later runs.
 
-export CATPHISH_JWT_SECRET=<32+ hex chars>
+# Optional manual override (Linux/macOS shell):
+export CATPHISH_JWT_SECRET=<64 hex chars>
 export CATPHISH_AUDIT_KEY=<64 hex chars>
-export CATPHISH_REPORT_SECRET=<32+ hex chars>
-export PORT=3000
+export CATPHISH_REPORT_SECRET=<64 hex chars>
+export PORT=3030
+
+# Optional manual override (PowerShell):
+$env:CATPHISH_JWT_SECRET="<64 hex chars>"
+$env:CATPHISH_AUDIT_KEY="<64 hex chars>"
+$env:CATPHISH_REPORT_SECRET="<64 hex chars>"
+$env:PORT="3030"
 ```
 
 ### Run
 ```bash
 npm start
-# Backend listens at http://127.0.0.1:3000
+# Backend listens at http://127.0.0.1:3030 by default
 ```
+
+### Verify it is running
+Open any of these in your browser:
+- `http://127.0.0.1:3030/`
+- `http://127.0.0.1:3030/api/health`
+- `http://127.0.0.1:3030/get` (compatibility route)
+
+If you set a custom port (for example `3031`), replace `3030` in the URLs.
+
+### Troubleshooting: "127.0.0.1 refused to connect"
+- Make sure the terminal running `npm start` is still open.
+- Make sure you are opening the same port as `PORT` in your environment.
+- If port `3030` is busy, run with another port:
+     - PowerShell: `$env:PORT="3031"; npm start`
 
 ### API endpoints
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
+| GET | `/` | — | Root API status |
+| GET | `/get` | — | Compatibility status route |
 | GET | `/api/health` | — | Server health check |
 | POST | `/api/auth/register` | — | Register user |
 | POST | `/api/auth/login` | — | Login, get JWT |

@@ -50,7 +50,7 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error("  node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
   process.exit(1);
 }
-const PORT = parseInt(process.env.PORT, 10) || 3000;
+const PORT = parseInt(process.env.PORT, 10) || 3030;
 
 // ---- Dependencies --------------------------------------------------------
 const AuthController        = require('./auth/auth_controller');
@@ -87,7 +87,7 @@ app.use(helmet({
 // SECURITY: CORS — Chrome extensions + localhost only
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',').map((s) => s.trim()).filter(Boolean)
-  .concat(['http://localhost:3000', 'http://127.0.0.1:3000']);
+  .concat(['http://localhost:3030', 'http://127.0.0.1:3030']);
 
 app.use(cors({
   origin: (origin, cb) => {
@@ -140,6 +140,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ---- Root route ----------------------------------------------------------
+app.get('/', (req, res) => {
+  res.json({ ok: true, message: 'CatPhish API server is running.', docs: '/api/health' });
+});
+
+// ---- Compatibility route --------------------------------------------------
+// Some local scripts/tests probe /get; map it to health-style output.
+app.get('/get', (req, res) => {
+  res.json({ ok: true, message: 'Use /api/health for the canonical health endpoint.' });
+});
+
 // ---- Global error handler -----------------------------------------------
 // SECURITY: never leak stack traces to clients
 app.use((err, req, res, _next) => {
@@ -163,8 +174,8 @@ if (process.env.CATPHISH_DEMO_MODE === 'true') {
 }
 
 // ---- Start ---------------------------------------------------------------
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`[CatPhish] Backend listening on http://127.0.0.1:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[CatPhish] Backend listening on http://0.0.0.0:${PORT}`);
   auditLog.append({ type: 'SERVER_STARTED', port: String(PORT) });
 });
 

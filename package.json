@@ -4,7 +4,7 @@
   "description": "CatPhish backend — threat intel feed, community reports, JWT auth",
   "main": "backend/server.js",
   "scripts": {
-    "start": "node backend/server.js",
+    "start": "node backend/start.js",
     "dev": "CATPHISH_DEMO_MODE=true node --watch backend/server.js"
   },
   "dependencies": {
