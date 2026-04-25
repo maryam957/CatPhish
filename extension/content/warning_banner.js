@@ -114,6 +114,18 @@
         } catch (_) {}
       });
 
+      const safeBtn = document.createElement('button');
+      safeBtn.className = 'cp-btn cp-btn-safe';
+      safeBtn.textContent = 'Safe preview';
+      safeBtn.addEventListener('click', () => {
+        try {
+          chrome.runtime.sendMessage({
+            type: 'CATPHISH_OPEN_SAFE_PREVIEW',
+            url: String(window.location.href || '')
+          }, () => {});
+        } catch (_) {}
+      });
+
       const dismissBtn = document.createElement('button');
       dismissBtn.className = 'cp-btn cp-btn-dismiss';
       dismissBtn.textContent = 'Dismiss';
@@ -123,6 +135,7 @@
       });
 
       actions.appendChild(leaveBtn);
+      actions.appendChild(safeBtn);
       actions.appendChild(reportBtn);
       actions.appendChild(dismissBtn);
       bar.appendChild(actions);
@@ -185,6 +198,7 @@
     }
     .cp-btn-leave   { background: #dc2626; color: #ffffff; }
     .cp-btn-report  { background: #1e3a8a; color: #ffffff; }
+    .cp-btn-safe    { background: #0f766e; color: #ffffff; }
     .cp-btn-dismiss { background: #ffffff; }
     .cp-btn:hover   { opacity: 0.92; }
     .cp-btn:disabled { opacity: 0.6; cursor: default; }

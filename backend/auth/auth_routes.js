@@ -33,15 +33,25 @@ function setupAuthRoutes(app, authController, authMiddleware) {
     maxAge:    7 * 24 * 60 * 60 * 1000                 // 7 days ms
   };
 
+  const allowOnlyFields = (allowed) => (req, res, next) => {
+    const body = req.body || {};
+    const keys = Object.keys(body);
+    if (keys.some((k) => !allowed.includes(k))) {
+      return res.status(400).json({ success: false, error: 'Invalid request payload.' });
+    }
+    return next();
+  };
+
   // ---- Register ----------------------------------------------------------
   app.post('/api/auth/register',
     authMiddleware.rateLimitByIP,
     authMiddleware.validateInput,
+    allowOnlyFields(['email', 'password']),
     async (req, res) => {
       try {
-        const { email, password, role } = req.body;
+        const { email, password } = req.body;
         const clientIp = req.ip || req.connection.remoteAddress;
-        const result   = await authController.register({ email, password, role, clientIp });
+        const result   = await authController.register({ email, password, clientIp });
         // SECURITY: always 200 (prevents timing-based enumeration)
         res.status(200).json(result);
       } catch (err) {
@@ -55,6 +65,7 @@ function setupAuthRoutes(app, authController, authMiddleware) {
   app.post('/api/auth/login',
     authMiddleware.rateLimitByIP,
     authMiddleware.validateInput,
+    allowOnlyFields(['email', 'password']),
     async (req, res) => {
       try {
         const { email, password } = req.body;
@@ -67,7 +78,7 @@ function setupAuthRoutes(app, authController, authMiddleware) {
         const result = await authController.login({ email, password, clientIp });
 
         if (!result.success) {
-          return res.status(401).json({ success: false, error: result.message });
+          return res.status(401).json({ success: false, error: 'Authentication failed.' });
         }
 
         // SECURITY: refresh token in httpOnly cookie (not accessible to JS)
@@ -185,6 +196,7 @@ function setupAuthRoutes(app, authController, authMiddleware) {
   app.post('/api/auth/change-password',
     authMiddleware.verifyAccessToken,
     authMiddleware.validateCSRFToken,
+    allowOnlyFields(['currentPassword', 'newPassword']),
     async (req, res) => {
       try {
         const { currentPassword, newPassword } = req.body;

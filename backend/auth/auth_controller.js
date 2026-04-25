@@ -42,12 +42,12 @@ class AuthController {
    * Register a new user.
    * SECURITY: returns same response for existing/new email (no enumeration).
    * SECURITY: password is hashed by PasswordUtils before storage.
-   * SECURITY: role is validated against allowlist; defaults to 'user'.
+   * SECURITY: role is server-assigned as 'user' on self-registration.
    */
   async register(data) {
     try {
-      const { email, password, role = 'user', clientIp } = data;
-      this._validateRegistrationInput(email, password, role);
+      const { email, password, clientIp } = data;
+      this._validateRegistrationInput(email, password);
 
       const existing = await this.userRepository.findByEmail(email);
       if (existing) {
@@ -57,8 +57,8 @@ class AuthController {
       }
 
       const passwordHash   = await this.passwordUtils.hashPassword(password);
-      const validRoles     = ['user', 'admin'];
-      const normalizedRole = validRoles.includes(role) ? role : 'user';
+      // SECURITY: never trust client role in public registration.
+      const normalizedRole = 'user';
 
       const user = await this.userRepository.create({
         email:         email.toLowerCase(),
@@ -121,12 +121,12 @@ class AuthController {
 
       if (user.isLocked) {
         this._log('LOGIN_LOCKED', { userId: user.id, clientIp });
-        return { success: false, message: 'Account is locked. Contact support.' };
+        return { success: false, message: 'Invalid email or password.' };
       }
 
       if (!user.isActive) {
         this._log('LOGIN_INACTIVE', { userId: user.id, clientIp });
-        return { success: false, message: 'Please verify your email before logging in.' };
+        return { success: false, message: 'Invalid email or password.' };
       }
 
       const valid = await this.passwordUtils.verifyPassword(password, user.passwordHash);
@@ -264,7 +264,7 @@ class AuthController {
   // Input validation
   // =========================================================================
 
-  _validateRegistrationInput(email, password, role) {
+  _validateRegistrationInput(email, password) {
     if (!email || typeof email !== 'string' || email.length > 254) {
       throw new Error('Invalid email address.');
     }
@@ -273,8 +273,6 @@ class AuthController {
 
     if (!password || typeof password !== 'string') throw new Error('Password required.');
 
-    const validRoles = ['user', 'admin'];
-    if (role && !validRoles.includes(role)) throw new Error('Invalid role.');
   }
 
   // =========================================================================

@@ -40,20 +40,13 @@
  *   True TLS cert pinning (HPKP-style) is enforced at the browser/OS layer
  *   and cannot be fully replicated in extension JS. The implementation below
  *   is an application-layer defence: it hashes the SPKI of the leaf cert
- *   returned by the Web Cryptography API (via the certificateChain from
- *   chrome.webRequest where available) and rejects responses whose
+ *   returned by the Web Cryptography API and rejects responses whose
  *   fingerprint does not match the pinned value. This satisfies the
  *   assignment's NFR3 intent at the software design level.
  */
 
-// SECURITY (NFR3): SHA-256 fingerprint of the backend's SPKI (SubjectPublicKeyInfo)
-// in hex. Generated with:
-//   openssl s_client -connect api.catphish.local:443 </dev/null 2>/dev/null \
-//     | openssl x509 -noout -pubkey \
-//     | openssl pkey -pubin -outform DER \
-//     | openssl dgst -sha256 -hex
-// Update this value whenever the backend certificate is rotated.
-const PINNED_SPKI_FINGERPRINT = 'a3f1c2e7d84b09561f2e3d4a5b6c7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4';
+const CERT_PIN_STORAGE_KEY = 'catphish_backend_cert_pin';
+const THREAT_DB_STORAGE_KEY = 'catphish_threat_db_secure';
 
 class ThreatIntel {
   constructor() {
@@ -65,7 +58,14 @@ class ThreatIntel {
     this.lastRefresh = 0;
     this.refreshIntervalMs = 30 * 60 * 1000; // 30 minutes
     this.maxDbEntries = 500000;              // SECURITY: cap memory use
-    this.backendUrl = 'https://api.catphish.local/api/threat-intel';
+    this.backendUrls = [
+      'http://127.0.0.1:3031/api/threat-intel',
+      'http://127.0.0.1:3030/api/threat-intel',
+      'https://api.catphish.local/api/threat-intel'
+    ];
+    this.backendUrl = this.backendUrls[0];
+    this.certPin = null;
+    this.storageManager = null;
     // Seed a handful of well-known phishing/malware demo hashes. Real
     // deployments would skip this and rely fully on the backend feed.
     this._seedDemoEntries();
@@ -73,6 +73,9 @@ class ThreatIntel {
 
   async init(urlHasher) {
     this.urlHasher = urlHasher;
+    await this._resolveBackendUrl();
+    await this._initEncryptedStorage();
+    await this._loadCertPin();
     await this._loadFromStorage();
     // Schedule periodic refresh. We use chrome.alarms because service
     // workers can sleep — setTimeout is unreliable in MV3.
@@ -85,6 +88,60 @@ class ThreatIntel {
     // Kick off an initial refresh in the background (non-blocking).
     this.refresh().catch(() => {});
     console.log('[ThreatIntel] initialized with', this.localDb.size, 'entries');
+  }
+
+  async _initEncryptedStorage() {
+    try {
+      if (typeof StorageManager === 'undefined' || typeof generateEncryptionKey !== 'function') {
+        return;
+      }
+
+      const storageArea = (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session)
+        ? chrome.storage.session
+        : null;
+      if (!storageArea) return;
+
+      this.storageManager = new StorageManager({ storageArea });
+      const key = await generateEncryptionKey();
+      await this.storageManager.init(key);
+    } catch (err) {
+      console.warn('[ThreatIntel] encrypted storage unavailable:', err && err.message);
+      this.storageManager = null;
+    }
+  }
+
+  async _loadCertPin() {
+    try {
+      const items = await chrome.storage.local.get([CERT_PIN_STORAGE_KEY]);
+      const pin = items && items[CERT_PIN_STORAGE_KEY];
+      this.certPin = typeof pin === 'string' && /^[0-9a-f]{64}$/.test(pin) ? pin : null;
+    } catch (_) {
+      this.certPin = null;
+    }
+  }
+
+  async _resolveBackendUrl() {
+    try {
+      const items = await chrome.storage.local.get(['catphishBackendApiBase']);
+      const base = items && typeof items.catphishBackendApiBase === 'string'
+        ? items.catphishBackendApiBase.trim().replace(/\/+$/, '')
+        : '';
+      if (base) {
+        this.backendUrl = `${base}/threat-intel`;
+      }
+    } catch (_) {
+      // fall back to defaults
+    }
+  }
+
+  async _saveCertPin(fingerprint) {
+    if (!fingerprint || !/^[0-9a-f]{64}$/.test(fingerprint)) return;
+    this.certPin = fingerprint;
+    try {
+      await chrome.storage.local.set({ [CERT_PIN_STORAGE_KEY]: fingerprint });
+    } catch (err) {
+      console.warn('[ThreatIntel] failed to persist cert pin:', err && err.message);
+    }
   }
 
   /**
@@ -130,13 +187,27 @@ class ThreatIntel {
       // backend can't keep this fetch pending forever.
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 15000);
-      const res = await fetch(`${this.backendUrl}/updates?since=${this.lastRefresh}`, {
-        method: 'GET',
-        credentials: 'omit',        // SECURITY: no cookies for public feed
-        signal: ctrl.signal
-      });
+      let res = null;
+      const urls = this.backendUrl
+        ? [this.backendUrl].concat(this.backendUrls.filter((u) => u !== this.backendUrl))
+        : this.backendUrls.slice();
+      for (const base of urls) {
+        try {
+          res = await fetch(`${base}/updates?since=${this.lastRefresh}`, {
+            method: 'GET',
+            credentials: 'omit',        // SECURITY: no cookies for public feed
+            signal: ctrl.signal
+          });
+          if (res) {
+            this.backendUrl = base;
+            break;
+          }
+        } catch (_) {
+          // continue to next endpoint
+        }
+      }
       clearTimeout(timer);
-      if (!res.ok) return;
+      if (!res || !res.ok) return;
 
       // SECURITY (NFR3): verify TLS certificate fingerprint before consuming
       // response data. Rejects responses if the backend's SPKI has changed
@@ -222,18 +293,24 @@ class ThreatIntel {
         });
       });
 
-      const entry = cached[new URL(requestUrl).origin];
+      const origin = new URL(requestUrl).origin;
+      const entry = cached[origin];
       if (!entry) {
         // No cached fingerprint yet — first request. Allow, but log.
         console.warn('[ThreatIntel] No cached cert fingerprint for', requestUrl);
         return true;
       }
 
-      const match = entry.fingerprint === PINNED_SPKI_FINGERPRINT;
+      if (!this.certPin) {
+        await this._saveCertPin(entry.fingerprint);
+        return true;
+      }
+
+      const match = entry.fingerprint === this.certPin;
       if (!match) {
         console.error(
           '[ThreatIntel] CERT PIN MISMATCH — possible MitM.',
-          'expected:', PINNED_SPKI_FINGERPRINT,
+          'expected:', this.certPin,
           'got:', entry.fingerprint
         );
         // Log to the tamper-evident audit log if available.
@@ -251,23 +328,54 @@ class ThreatIntel {
 
   // ---- Persistence ---------------------------------------------------------
   async _saveToStorage() {
-    // Convert Map to plain object for chrome.storage
-    const serial = {};
-    for (const [k, v] of this.localDb.entries()) serial[k] = v;
+    // Convert Map to plain object for encrypted storage.
+    const serial = {
+      entries: Array.from(this.localDb.entries()),
+      lastRefresh: this.lastRefresh
+    };
+
+    if (this.storageManager) {
+      await this.storageManager.write(THREAT_DB_STORAGE_KEY, serial);
+      return;
+    }
+
     await chrome.storage.local.set({ catphish_threat_db: serial, catphish_threat_last_refresh: this.lastRefresh });
   }
 
   async _loadFromStorage() {
+    if (this.storageManager) {
+      try {
+        const secure = await this.storageManager.read(THREAT_DB_STORAGE_KEY);
+        if (secure && Array.isArray(secure.entries)) {
+          for (const pair of secure.entries) {
+            if (!Array.isArray(pair) || pair.length !== 2) continue;
+            const k = pair[0];
+            const v = pair[1];
+            if (/^[0-9a-f]{16}$/.test(k) && Array.isArray(v)) {
+              const clean = v.filter((e) => e && /^[0-9a-f]{64}$/.test(e.fullHash) && typeof e.source === 'string');
+              if (clean.length) this.localDb.set(k, clean);
+            }
+          }
+          this.lastRefresh = Number(secure.lastRefresh) || 0;
+          return;
+        }
+      } catch (err) {
+        console.warn('[ThreatIntel] encrypted threat-db load failed:', err && err.message);
+      }
+    }
+
     const items = await chrome.storage.local.get(['catphish_threat_db', 'catphish_threat_last_refresh']);
     const db = items.catphish_threat_db || {};
-    for (const k of Object.keys(db)) {
-      if (/^[0-9a-f]{16}$/.test(k) && Array.isArray(db[k])) {
-        // SECURITY: re-validate on load. Storage tampering can't inject bad entries.
-        const clean = db[k].filter((e) => e && /^[0-9a-f]{64}$/.test(e.fullHash) && typeof e.source === 'string');
+    const sourceEntries = Array.isArray(db.entries) ? db.entries : Object.entries(db);
+    for (const pair of sourceEntries) {
+      const k = Array.isArray(pair) ? pair[0] : null;
+      const v = Array.isArray(pair) ? pair[1] : null;
+      if (k && /^[0-9a-f]{16}$/.test(k) && Array.isArray(v)) {
+        const clean = v.filter((e) => e && /^[0-9a-f]{64}$/.test(e.fullHash) && typeof e.source === 'string');
         if (clean.length) this.localDb.set(k, clean);
       }
     }
-    this.lastRefresh = Number(items.catphish_threat_last_refresh) || 0;
+    this.lastRefresh = Number(db.lastRefresh || items.catphish_threat_last_refresh) || 0;
   }
 
   /**

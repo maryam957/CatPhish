@@ -38,7 +38,7 @@ CATPHISH_JWT_SECRET=$jwt
 CATPHISH_AUDIT_KEY=$audit
 CATPHISH_REPORT_SECRET=$report
 CATPHISH_DEMO_MODE=true
-PORT=3030
+PORT=3031
 NODE_ENV=development
 "@
 
@@ -65,7 +65,9 @@ Get-Content ".env" | ForEach-Object {
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  Starting CatPhish Backend..." -ForegroundColor Cyan
-Write-Host "  URL: http://127.0.0.1:3030" -ForegroundColor Cyan
+$launchPort = [System.Environment]::GetEnvironmentVariable("PORT", "Process")
+if (-not $launchPort) { $launchPort = "3031" }
+Write-Host "  URL: http://127.0.0.1:$launchPort" -ForegroundColor Cyan
 Write-Host "  Press Ctrl+C to stop" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""

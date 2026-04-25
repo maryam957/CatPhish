@@ -73,6 +73,6 @@
   ],
 
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-src 'self' blob:; connect-src 'self' https://api.catphish.local;"
+    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-src 'self' blob:; connect-src 'self' https://api.catphish.local http: https:;"
   }
 }

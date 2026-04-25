@@ -6,11 +6,12 @@
  */
 
 class StorageManager {
-  constructor() {
+  constructor(options = {}) {
     this.masterKey = null;
     this.isInitialized = false;
     this.cacheData = new Map(); // In-memory cache
     this.signatureKey = null; // For backend response verification
+    this.storageArea = options.storageArea || (typeof chrome !== 'undefined' ? chrome.storage.local : null);
   }
 
   /**
@@ -48,6 +49,9 @@ class StorageManager {
       if (!this.isInitialized) {
         throw new Error('StorageManager not initialized');
       }
+      if (!this.storageArea) {
+        throw new Error('Storage area not available');
+      }
 
       // Guard condition: Verify backend signature if provided
       if (backendSignature && this.signatureKey) {
@@ -66,7 +70,7 @@ class StorageManager {
 
       // Store in chrome.storage.local (encrypted)
       const storageKey = `catphish_enc_${key}`;
-      await chrome.storage.local.set({
+      await this.storageArea.set({
         [storageKey]: encrypted,
         [`${storageKey}_metadata`]: {
           timestamp: Date.now(),
@@ -94,6 +98,9 @@ class StorageManager {
       if (!this.isInitialized) {
         throw new Error('StorageManager not initialized');
       }
+      if (!this.storageArea) {
+        throw new Error('Storage area not available');
+      }
 
       // Check in-memory cache first
       if (this.cacheData.has(key)) {
@@ -102,7 +109,7 @@ class StorageManager {
 
       // Read from encrypted storage
       const storageKey = `catphish_enc_${key}`;
-      const result = await chrome.storage.local.get([storageKey]);
+      const result = await this.storageArea.get([storageKey]);
 
       if (!result[storageKey]) {
         console.log('[StorageManager] Key not found:', key);
@@ -135,7 +142,9 @@ class StorageManager {
   async delete(key) {
     try {
       const storageKey = `catphish_enc_${key}`;
-      await chrome.storage.local.remove([storageKey, `${storageKey}_metadata`]);
+      if (this.storageArea) {
+        await this.storageArea.remove([storageKey, `${storageKey}_metadata`]);
+      }
       this.cacheData.delete(key);
       console.log('[StorageManager] Data deleted:', key);
     } catch (error) {
@@ -155,11 +164,12 @@ class StorageManager {
       this.cacheData.clear();
 
       // Clear all catphish encrypted data from storage
-      const allItems = await chrome.storage.local.get(null);
+      if (!this.storageArea) return;
+      const allItems = await this.storageArea.get(null);
       const keysToRemove = Object.keys(allItems).filter(k => k.startsWith('catphish_enc_'));
       
       if (keysToRemove.length > 0) {
-        await chrome.storage.local.remove(keysToRemove);
+        await this.storageArea.remove(keysToRemove);
         console.log('[StorageManager] Cache wiped - removed', keysToRemove.length, 'items');
       }
     } catch (error) {
@@ -273,6 +283,14 @@ class StorageManager {
    */
   setSignatureKey(signatureKey) {
     this.signatureKey = signatureKey;
+  }
+
+  /**
+   * Change the browser storage area used for encrypted persistence.
+   * @param {Object} storageArea
+   */
+  setStorageArea(storageArea) {
+    this.storageArea = storageArea;
   }
 
   /**

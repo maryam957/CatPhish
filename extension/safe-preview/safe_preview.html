@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-src 'self' blob:; connect-src 'self' http: https:;" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CatPhish Safe Preview</title>
+    <link rel="stylesheet" href="safe_preview.css" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="toolbar">
+        <div>
+          <p class="eyebrow">CatPhish</p>
+          <h1>Safe Preview</h1>
+        </div>
+        <button id="goBackBtn" class="btn" type="button">Back</button>
+      </header>
+      <p id="status" class="status">Preparing safe preview...</p>
+      <section id="previewMount" class="preview-mount" aria-label="Safe preview area"></section>
+    </main>
+
+    <script src="sanitizer.js"></script>
+    <script src="safe_preview.js"></script>
+    <script src="safe_preview_page.js"></script>
+  </body>
+</html>

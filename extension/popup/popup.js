@@ -246,6 +246,29 @@
     });
   }
 
+  function wireSafePreviewButton(tabId) {
+    var btn = el('safePreviewBtn');
+    var status = el('reportStatus');
+    if (!btn) return;
+
+    btn.addEventListener('click', function () {
+      try {
+        chrome.runtime.sendMessage(
+          { type: 'CATPHISH_OPEN_SAFE_PREVIEW', tabId: tabId },
+          function (resp) {
+            if (resp && resp.ok) {
+              if (status) status.textContent = 'Opening safe preview...';
+            } else if (status) {
+              status.textContent = (resp && resp.error) ? String(resp.error).slice(0, 90) : 'Safe preview unavailable.';
+            }
+          }
+        );
+      } catch (err) {
+        if (status) status.textContent = 'Safe preview failed: ' + safeStr(err && err.message, 70);
+      }
+    });
+  }
+
   // ---- Settings button ---------------------------------------------------
 
   function wireSettingsButton() {
@@ -273,6 +296,7 @@
           var snapshot = resp && resp.snapshot ? resp.snapshot : null;
           var verdict  = resp && resp.verdict  ? resp.verdict  : null;
           renderAll(snapshot, verdict);
+          wireSafePreviewButton(tabId);
           if (verdict && verdict.hashPrefix) wireReportButton(verdict.hashPrefix);
         }
       );

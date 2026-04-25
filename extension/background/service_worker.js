@@ -10,6 +10,8 @@
 
 try {
   importScripts(
+    '../storage/crypto_utils.js',
+    '../storage/storage_manager.js',
     'url_hasher.js',
     'url_engine.js',
     'threat_intel.js',
@@ -26,6 +28,11 @@ try {
 const SNAPSHOT_STORAGE_KEY = 'catphishSnapshots';
 const VERDICT_STORAGE_KEY  = 'catphishVerdicts';
 const SETTINGS_KEY         = 'catphishSettings';
+const URL_ANALYSIS_APIS    = [
+  'http://127.0.0.1:3031/api/url-analysis/report',
+  'http://127.0.0.1:3030/api/url-analysis/report',
+  'https://api.catphish.local/api/url-analysis/report'
+];
 
 const DEFAULT_SETTINGS = {
   riskThreshold: 0.6,
@@ -84,7 +91,15 @@ async function analyzePage(url, tabId) {
     const knownTestHit = detectKnownTestUrl(url);
 
     // 2) Initial Verdict (URL-only)
-    const verdict = combineVerdict(intelHit, heuristic, knownTestHit, null);
+    const initialVerdict = combineVerdict(intelHit, heuristic, knownTestHit, null);
+
+    // 2.5) FR3: ask backend to score this URL hash prefix too.
+    const backendScore = await requestBackendRiskScore(
+      hashInfo.prefix,
+      initialVerdict.riskScore,
+      initialVerdict.reasons
+    );
+    const verdict = applyBackendScore(initialVerdict, backendScore);
 
     // 3) Persist & Enforcement
     await storeVerdict(tabId, {
@@ -94,6 +109,8 @@ async function analyzePage(url, tabId) {
       verdict: verdict.label,
       reasons: verdict.reasons,
       intelSources: intelHit.sources,
+      backendScore: verdict.backendScore,
+      backendTs: verdict.backendTs,
       capturedAt: new Date().toISOString()
     });
 
@@ -188,12 +205,99 @@ function combineVerdict(intel, heuristic, knownTestHit, snapshotSignals) {
   }
 
   const finalScore = clamp01(score);
-  let label = 'SAFE';
-  if (finalScore >= 0.85) label = 'DANGEROUS';
-  else if (finalScore >= 0.6) label = 'SUSPICIOUS';
-  else if (finalScore >= 0.3) label = 'LOW_RISK';
+  const label = classifyScore(finalScore);
 
   return { riskScore: finalScore, reasons, label };
+}
+
+function classifyScore(score) {
+  const n = clamp01(score);
+  if (n >= 0.85) return 'DANGEROUS';
+  if (n >= 0.6) return 'SUSPICIOUS';
+  if (n >= 0.3) return 'LOW_RISK';
+  return 'SAFE';
+}
+
+function sanitizeReasonForBackend(reason) {
+  return {
+    type: String((reason && reason.type) || 'UNKNOWN').slice(0, 40),
+    severity: String((reason && reason.severity) || 'LOW').slice(0, 12),
+    message: String((reason && reason.message) || '').slice(0, 180)
+  };
+}
+
+async function requestBackendRiskScore(hashPrefix, localScore, reasons) {
+  try {
+    if (!hashPrefix || typeof hashPrefix !== 'string') return null;
+
+    const payload = {
+      hashPrefix: String(hashPrefix).toLowerCase().slice(0, 64),
+      clientRiskScore: clamp01(localScore),
+      riskFactors: Array.isArray(reasons) ? reasons.slice(0, 12).map(sanitizeReasonForBackend) : [],
+      timestamp: Date.now()
+    };
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+
+    let res = null;
+    for (const endpoint of URL_ANALYSIS_APIS) {
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify(payload),
+          signal: ctrl.signal
+        });
+        if (res) break;
+      } catch (_) {
+        // Try next endpoint candidate.
+      }
+    }
+    clearTimeout(timer);
+
+    if (!res || !res.ok) return null;
+    const body = await res.json().catch(() => null);
+    if (!body || typeof body !== 'object') return null;
+
+    const serverScore = clamp01(body.serverScore);
+    if (!Number.isFinite(serverScore)) return null;
+
+    return {
+      serverScore,
+      ts: Number(body.ts) || Date.now(),
+      reportCount: Number(body.reportCount) || 0,
+      signature: typeof body.signature === 'string' ? body.signature : ''
+    };
+  } catch (_) {
+    // Backend scoring is additive. Fail open and keep local verdict.
+    return null;
+  }
+}
+
+function applyBackendScore(verdict, backend) {
+  if (!backend) return { ...verdict, backendScore: null, backendTs: null };
+
+  const localScore = clamp01(verdict && verdict.riskScore);
+  const remoteScore = clamp01(backend.serverScore);
+  const finalScore = Math.max(localScore, remoteScore);
+
+  const reasons = Array.isArray(verdict && verdict.reasons) ? [...verdict.reasons] : [];
+  reasons.push({
+    type: 'BACKEND_SCORE',
+    severity: remoteScore >= 0.85 ? 'HIGH' : (remoteScore >= 0.6 ? 'MEDIUM' : 'LOW'),
+    message: 'Backend score: ' + Math.round(remoteScore * 100) + '%'
+  });
+
+  return {
+    ...verdict,
+    riskScore: finalScore,
+    label: classifyScore(finalScore),
+    reasons,
+    backendScore: remoteScore,
+    backendTs: backend.ts || null
+  };
 }
 
 function detectKnownTestUrl(url) {
@@ -240,13 +344,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // RE-CHECK AMTSO: Important for the fix
         const testHit = detectKnownTestUrl(existing?.fullUrl || sender.tab.url);
 
-        const merged = combineVerdict(intelProxy, null, testHit, snapshotSignals);
+        const mergedLocal = combineVerdict(intelProxy, null, testHit, snapshotSignals);
+        const backendScore = await requestBackendRiskScore(
+          existing && existing.hashPrefix,
+          mergedLocal.riskScore,
+          mergedLocal.reasons
+        );
+        const merged = applyBackendScore(mergedLocal, backendScore);
 
         const updatedVerdict = {
           ...existing,
           riskScore: merged.riskScore,
           verdict: merged.label,
           reasons: merged.reasons,
+          backendScore: merged.backendScore,
+          backendTs: merged.backendTs,
           capturedAt: new Date().toISOString()
         };
 
@@ -277,6 +389,95 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.storage.local.set({ [SETTINGS_KEY]: next }).then(() => sendResponse({ ok: true, settings: next }));
       return true;
     }
+
+    case 'CATPHISH_REPORT_SITE': {
+      (async () => {
+        try {
+          await ensureHelpers();
+          const payload = message && message.payload ? message.payload : {};
+          const result = await reporter.submit({
+            hashPrefix: payload.hashPrefix,
+            category: payload.category,
+            notes: payload.notes
+          });
+          sendResponse({ ok: true, result });
+        } catch (err) {
+          sendResponse({ ok: false, error: (err && err.message) || 'Report failed.' });
+        }
+      })();
+      return true;
+    }
+
+    case 'CATPHISH_GET_AUDIT_LOG': {
+      (async () => {
+        try {
+          await ensureHelpers();
+          const entries = await auditLog.readAll();
+          const chainValid = await auditLog.verifyChain();
+          sendResponse({ ok: true, entries, chainValid });
+        } catch (err) {
+          sendResponse({ ok: false, entries: [], chainValid: false, error: (err && err.message) || 'Failed to load audit log.' });
+        }
+      })();
+      return true;
+    }
+
+    case 'CATPHISH_WIPE_DATA': {
+      (async () => {
+        try {
+          analysisCache.clear();
+          await chrome.storage.local.clear();
+          await chrome.storage.session.clear();
+          urlHasher = null;
+          urlEngine = null;
+          threatIntel = null;
+          auditLog = null;
+          reporter = null;
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ ok: false, error: (err && err.message) || 'Wipe failed.' });
+        }
+      })();
+      return true;
+    }
+
+    case 'CATPHISH_OPEN_SAFE_PREVIEW': {
+      (async () => {
+        try {
+          const msgTabId = safeNumber(message.tabId);
+          const targetTabId = msgTabId || safeNumber(tabId);
+          if (!targetTabId) {
+            sendResponse({ ok: false, error: 'No tabId available.' });
+            return;
+          }
+
+          let targetUrl = typeof message.url === 'string' ? message.url : '';
+
+          if (!targetUrl) {
+            const items = await chrome.storage.session.get([VERDICT_STORAGE_KEY]);
+            const verdict = (items[VERDICT_STORAGE_KEY] || {})[String(targetTabId)] || null;
+            targetUrl = verdict && verdict.fullUrl ? String(verdict.fullUrl) : '';
+          }
+
+          if (!targetUrl) {
+            const tabInfo = await chrome.tabs.get(targetTabId);
+            targetUrl = tabInfo && tabInfo.url ? String(tabInfo.url) : '';
+          }
+
+          if (!/^https?:/i.test(targetUrl)) {
+            sendResponse({ ok: false, error: 'Safe preview requires an http(s) page.' });
+            return;
+          }
+
+          const previewUrl = chrome.runtime.getURL('safe-preview/safe_preview.html?target=' + encodeURIComponent(targetUrl));
+          await chrome.tabs.update(targetTabId, { url: previewUrl });
+          sendResponse({ ok: true });
+        } catch (err) {
+          sendResponse({ ok: false, error: (err && err.message) || 'Failed to open safe preview.' });
+        }
+      })();
+      return true;
+    }
   }
 });
 
@@ -293,7 +494,12 @@ async function maybeEnforceVerdict(tabId, hashPrefix, verdict, settings, sources
   } else if (verdict.riskScore >= settings.riskThreshold && settings.showWarningBanner) {
     chrome.tabs.sendMessage(tabId, {
       type: 'CATPHISH_SHOW_BANNER',
-      payload: { riskScore: verdict.riskScore, reasons: verdict.reasons.slice(0, 3), sources: sources || [] }
+      payload: {
+        hashPrefix: hashPrefix || '',
+        riskScore: verdict.riskScore,
+        reasons: verdict.reasons.slice(0, 3),
+        sources: sources || []
+      }
     }).catch(() => {}); // Content script might not be ready
   }
 }

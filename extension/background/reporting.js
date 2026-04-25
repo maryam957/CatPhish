@@ -25,7 +25,12 @@
 
 class CommunityReporter {
   constructor() {
-    this.backendUrl  = 'https://api.catphish.local/api';
+    this.backendBaseCandidates = [
+      'http://127.0.0.1:3031/api',
+      'http://127.0.0.1:3030/api',
+      'https://api.catphish.local/api'
+    ];
+    this.backendUrl  = this.backendBaseCandidates[0];
     this.urlHasher   = null;
     this.auditLog    = null;
     this.signingKey  = null; // HMAC-SHA256, NOT extractable
@@ -37,9 +42,22 @@ class CommunityReporter {
   async init(urlHasher, auditLog) {
     this.urlHasher = urlHasher;
     this.auditLog  = auditLog;
+    await this._resolveBackendUrl();
     await this._loadOrCreateSession();
     // Register key with backend (non-blocking — network may not be available)
     this._registerSession().catch(() => {});
+  }
+
+  async _resolveBackendUrl() {
+    try {
+      const item = await chrome.storage.local.get(['catphishBackendApiBase']);
+      const fromSettings = item && typeof item.catphishBackendApiBase === 'string'
+        ? item.catphishBackendApiBase.trim().replace(/\/+$/, '')
+        : '';
+      if (fromSettings) {
+        this.backendUrl = fromSettings;
+      }
+    } catch (_) { /* ignore storage read issues */ }
   }
 
   // =========================================================================
@@ -80,7 +98,7 @@ class CommunityReporter {
     let ok = false, remoteId = null;
 
     try {
-      const res = await fetch(`${this.backendUrl}/reports`, {
+      const res = await this._fetchWithFallback('/reports', {
         method:      'POST',
         headers:     { 'Content-Type': 'application/json' },
         credentials: 'omit',  // SECURITY: no cookies for report endpoint
@@ -178,7 +196,7 @@ class CommunityReporter {
     try {
       const ctrl  = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 10000);
-      const res = await fetch(`${this.backendUrl}/sessions/register`, {
+      const res = await this._fetchWithFallback('/sessions/register', {
         method:      'POST',
         headers:     { 'Content-Type': 'application/json' },
         credentials: 'omit',
@@ -239,6 +257,24 @@ class CommunityReporter {
     return str.replace(/[<>&"']/g,
       (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c] || c)
     );
+  }
+
+  async _fetchWithFallback(path, options) {
+    const urls = this.backendUrl
+      ? [this.backendUrl].concat(this.backendBaseCandidates.filter((u) => u !== this.backendUrl))
+      : this.backendBaseCandidates.slice();
+
+    let lastError = null;
+    for (const base of urls) {
+      try {
+        const res = await fetch(`${base}${path}`, options);
+        this.backendUrl = base;
+        return res;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError || new Error('Backend unavailable');
   }
 }
 

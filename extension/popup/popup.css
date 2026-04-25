@@ -183,3 +183,10 @@ h2 { font-size: 0.95rem; }
   color: #fff;
 }
 .btn-danger:not(:disabled):hover { filter: brightness(1.08); }
+
+.btn-secondary {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border-color: rgba(255,255,255,0.12);
+}
+.btn-secondary:not(:disabled):hover { background: rgba(255,255,255,0.12); }

@@ -76,6 +76,7 @@ const setupSessionRoutes     = require('./routes/session_routes');
 
 // ---- Build app -----------------------------------------------------------
 const app = express();
+app.set('trust proxy', 1);
 
 // SECURITY: helmet sets security headers on every response
 app.use(helmet({
@@ -104,6 +105,14 @@ app.use(cors({
 app.use(express.json({ limit: '16kb' }));
 // SECURITY: reads httpOnly refresh-token cookie
 app.use(cookieParser());
+
+// SECURITY: in production, reject insecure transport for auth endpoints.
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV !== 'production') return next();
+  if (!req.path.startsWith('/api/auth/')) return next();
+  if (req.secure || req.headers['x-forwarded-proto'] === 'https') return next();
+  return res.status(400).json({ error: 'Secure transport required.' });
+});
 
 // ---- Instantiate services ------------------------------------------------
 const jwtUtils        = new JWTUtils(JWT_SECRET);
@@ -162,9 +171,9 @@ app.use((err, req, res, _next) => {
 if (process.env.CATPHISH_DEMO_MODE === 'true') {
   app.post('/api/auth/demo-activate', async (req, res) => {
     const { email } = req.body || {};
-    if (!email) return res.status(400).json({ error: 'email required' });
+    if (!email) return res.status(200).json({ ok: true });
     const user = await userRepo.findByEmail(email.toLowerCase());
-    if (!user) return res.status(404).json({ error: 'user not found' });
+    if (!user) return res.status(200).json({ ok: true });
     await userRepo.activateUser(user.id);
     auditLog.append({ type: 'DEMO_USER_ACTIVATED', email: email.slice(0, 64) });
     console.warn('[CatPhish][DEMO] Activated without email verification:', email);
