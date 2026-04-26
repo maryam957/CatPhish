@@ -155,6 +155,7 @@ function setupAuthRoutes(app, authController, authMiddleware) {
   // ---- Logout ------------------------------------------------------------
   app.post('/api/auth/logout',
     authMiddleware.verifyAccessToken,
+    authMiddleware.validateCSRFToken,
     (req, res) => {
       try {
         const refreshToken = req.cookies.refreshToken;

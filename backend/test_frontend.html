@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CatPhish API Tester</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+  header { background: #1a1d2e; border-bottom: 2px solid #6c63ff; padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 1.4rem; color: #c084fc; }
+  header span { font-size: 0.8rem; color: #64748b; }
+  .status-bar { background: #0d1117; border-bottom: 1px solid #1e293b; padding: 8px 24px; font-size: 0.78rem; color: #64748b; display: flex; gap: 16px; flex-wrap: wrap; }
+  .status-bar .pill { background: #1e293b; padding: 2px 10px; border-radius: 99px; }
+  .status-bar .pill.ok { border: 1px solid #22c55e; color: #4ade80; }
+  .status-bar .pill.err { border: 1px solid #ef4444; color: #f87171; }
+  .status-bar .pill.warn { border: 1px solid #f59e0b; color: #fbbf24; }
+  main { display: grid; grid-template-columns: 280px 1fr; height: calc(100vh - 96px); }
+  nav { background: #111827; border-right: 1px solid #1e293b; overflow-y: auto; padding: 12px 0; }
+  nav .section-label { font-size: 0.68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #475569; padding: 10px 16px 4px; }
+  nav button { display: block; width: 100%; text-align: left; padding: 9px 16px; background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 0.85rem; transition: all 0.15s; border-left: 3px solid transparent; }
+  nav button:hover { background: #1e293b; color: #e2e8f0; }
+  nav button.active { background: #1e1b4b; color: #a78bfa; border-left-color: #6c63ff; }
+  .content { overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+  .card { background: #1a1d2e; border: 1px solid #1e293b; border-radius: 12px; overflow: hidden; }
+  .card-header { padding: 14px 20px; background: #111827; border-bottom: 1px solid #1e293b; display: flex; align-items: center; justify-content: space-between; }
+  .card-header h2 { font-size: 0.95rem; font-weight: 600; color: #c4b5fd; }
+  .method-badge { font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+  .GET { background: #064e3b; color: #34d399; }
+  .POST { background: #1e3a5f; color: #60a5fa; }
+  .DELETE { background: #4c1d1d; color: #f87171; }
+  .card-body { padding: 20px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 0.78rem; font-weight: 600; color: #64748b; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; background: #0f1117; border: 1px solid #334155; border-radius: 8px; padding: 9px 12px; color: #e2e8f0; font-size: 0.88rem; font-family: inherit; transition: border-color 0.15s; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: #6c63ff; }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .hint { font-size: 0.75rem; color: #475569; margin-top: 4px; }
+  .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 600; transition: all 0.15s; }
+  .btn-primary { background: #6c63ff; color: white; }
+  .btn-primary:hover { background: #5b52e0; }
+  .btn-danger { background: #dc2626; color: white; }
+  .btn-danger:hover { background: #b91c1c; }
+  .btn-success { background: #16a34a; color: white; }
+  .btn-success:hover { background: #15803d; }
+  .response-box { margin-top: 16px; }
+  .response-box h3 { font-size: 0.78rem; color: #64748b; margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .response-pre { background: #0a0d14; border: 1px solid #1e293b; border-radius: 8px; padding: 14px; font-family: 'Fira Code', 'Cascadia Code', monospace; font-size: 0.8rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 280px; overflow-y: auto; }
+  .response-pre.success { border-color: #166534; color: #86efac; }
+  .response-pre.error { border-color: #7f1d1d; color: #fca5a5; }
+  .response-pre.info { border-color: #1e3a5f; color: #93c5fd; }
+  .token-display { background: #0a0d14; border: 1px solid #1e3a5f; border-radius: 8px; padding: 10px 14px; font-family: monospace; font-size: 0.75rem; color: #60a5fa; word-break: break-all; margin-top: 6px; }
+  .session-info { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .session-card { background: #0f1117; border: 1px solid #1e293b; border-radius: 8px; padding: 12px; }
+  .session-card .label { font-size: 0.7rem; color: #475569; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .session-card .value { font-size: 0.82rem; color: #a5b4fc; word-break: break-all; }
+  .session-card .value.none { color: #374151; }
+  .step-indicator { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .step { padding: 4px 12px; border-radius: 99px; font-size: 0.75rem; font-weight: 600; border: 1px solid #1e293b; color: #475569; }
+  .step.done { border-color: #166534; color: #4ade80; background: #052e16; }
+  .step.current { border-color: #6c63ff; color: #a78bfa; background: #1e1b4b; }
+  .divider { height: 1px; background: #1e293b; margin: 16px 0; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row .btn { flex: 1; min-width: 140px; }
+  .alert { padding: 10px 14px; border-radius: 8px; font-size: 0.83rem; margin-bottom: 12px; }
+  .alert-info { background: #0c1a2e; border: 1px solid #1e40af; color: #93c5fd; }
+  .alert-warn { background: #1c1000; border: 1px solid #92400e; color: #fcd34d; }
+  #baseUrl-input { width: 220px; background: #0f1117; border: 1px solid #334155; border-radius: 6px; padding: 4px 10px; color: #e2e8f0; font-size: 0.82rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🐱 CatPhish API Tester</h1>
+    <span>Manual frontend test tool — all endpoints</span>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+    <label style="font-size:.78rem;color:#64748b">Base URL:</label>
+    <input id="baseUrl-input" value="http://localhost:3031">
+    <button class="btn btn-primary" onclick="checkHealth()" style="padding:5px 12px;font-size:.8rem">Ping</button>
+  </div>
+</header>
+
+<div class="status-bar">
+  <span>Session: </span>
+  <span id="stat-health" class="pill">⬤ Server Unknown</span>
+  <span id="stat-auth" class="pill">⬤ Not logged in</span>
+  <span id="stat-role" class="pill">Role: —</span>
+  <span id="stat-csrf" class="pill">CSRF: —</span>
+</div>
+
+<main>
+  <nav>
+    <div class="section-label">Auth Flow</div>
+    <button onclick="showPanel('register')" id="nav-register">① Register</button>
+    <button onclick="showPanel('verify')" id="nav-verify">② Verify Email</button>
+    <button onclick="showPanel('login')" id="nav-login">③ Login</button>
+    <button onclick="showPanel('me')" id="nav-me">④ Get Profile</button>
+    <button onclick="showPanel('change-pw')" id="nav-change-pw">⑤ Change Password</button>
+    <button onclick="showPanel('refresh')" id="nav-refresh">⑥ Refresh Token</button>
+    <button onclick="showPanel('logout')" id="nav-logout">⑦ Logout</button>
+    <div class="section-label">Reports</div>
+    <button onclick="showPanel('submit-report')" id="nav-submit-report">Submit Report</button>
+    <button onclick="showPanel('admin-reports')" id="nav-admin-reports">Admin: View Reports</button>
+    <div class="section-label">Threat Intel</div>
+    <button onclick="showPanel('ti-updates')" id="nav-ti-updates">Get Updates</button>
+    <button onclick="showPanel('ti-add')" id="nav-ti-add">Admin: Add Entry</button>
+    <button onclick="showPanel('ti-remove')" id="nav-ti-remove">Admin: Remove Entry</button>
+    <button onclick="showPanel('ti-audit')" id="nav-ti-audit">Admin: Audit Log</button>
+    <div class="section-label">URL Analysis</div>
+    <button onclick="showPanel('ua-report')" id="nav-ua-report">Submit Analysis</button>
+    <button onclick="showPanel('ua-stats')" id="nav-ua-stats">Admin: Stats</button>
+    <div class="section-label">Sessions</div>
+    <button onclick="showPanel('sess-register')" id="nav-sess-register">Register Session</button>
+    <div class="section-label">Demo Shortcuts</div>
+    <button onclick="showPanel('demo-activate')" id="nav-demo-activate">Demo Activate</button>
+    <button onclick="showPanel('demo-admin')" id="nav-demo-admin">Make Admin (Demo)</button>
+  </nav>
+
+  <div class="content" id="panels">
+
+    <!-- REGISTER -->
+    <div id="panel-register" class="panel">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/register</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">
+            <strong>Step 1:</strong> Register a new user. In demo mode the response includes <code>_demoVerifyToken</code> — copy it for Step 2. Password must be 8+ chars with 3 of: uppercase, lowercase, digit, special char.
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input id="reg-email" type="email" value="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input id="reg-password" type="password" value="Test1234!">
+            <div class="hint">Min 8 chars. Need 3 of: uppercase, lowercase, digit, special char (e.g. Test1234!)</div>
+          </div>
+          <button class="btn btn-primary" onclick="doRegister()">Register</button>
+          <div class="response-box" id="reg-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VERIFY EMAIL -->
+    <div id="panel-verify" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/verify-email</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">
+            <strong>Step 2:</strong> Paste the <code>_demoVerifyToken</code> from the register response below. In production this would come via email.
+          </div>
+          <div class="alert alert-warn">
+            <strong>Alternative (Demo mode only):</strong> Use "Demo Activate" in the sidebar to skip verification entirely.
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input id="ver-email" type="email" value="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>Verification Token (from register response)</label>
+            <input id="ver-token" type="text" placeholder="paste _demoVerifyToken here">
+          </div>
+          <button class="btn btn-primary" onclick="doVerify()">Verify Email</button>
+          <div class="response-box" id="ver-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="panel-login" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/login</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">
+            <strong>Step 3:</strong> Login. On success an <strong>access token</strong> (15 min) and <strong>CSRF token</strong> are stored in memory for subsequent requests. A <strong>refresh token</strong> is set as an httpOnly cookie.
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input id="login-email" type="email" value="user@example.com">
+          </div>
+          <div class="form-group">
+            <label>Password</label>
+            <input id="login-password" type="password" value="Test1234!">
+          </div>
+          <button class="btn btn-primary" onclick="doLogin()">Login</button>
+          <div class="response-box" id="login-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GET ME -->
+    <div id="panel-me" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>GET /api/auth/me</h2>
+          <span class="method-badge GET">GET</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Requires a valid access token. Returns the logged-in user's id, email, and role.</div>
+          <button class="btn btn-primary" onclick="doGetMe()">Get My Profile</button>
+          <div class="response-box" id="me-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CHANGE PASSWORD -->
+    <div id="panel-change-pw" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/change-password</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Requires access token + CSRF token (automatically sent from session). Requires re-confirmation of the current password.</div>
+          <div class="form-group">
+            <label>Current Password</label>
+            <input id="cp-current" type="password" value="Test1234!">
+          </div>
+          <div class="form-group">
+            <label>New Password</label>
+            <input id="cp-new" type="password" value="NewPass456!">
+          </div>
+          <button class="btn btn-primary" onclick="doChangePassword()">Change Password</button>
+          <div class="response-box" id="cp-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REFRESH -->
+    <div id="panel-refresh" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/refresh</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Uses the httpOnly refresh token cookie (set automatically during login) to issue a new access token. No body needed.</div>
+          <button class="btn btn-primary" onclick="doRefresh()">Refresh Token</button>
+          <div class="response-box" id="refresh-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGOUT -->
+    <div id="panel-logout" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/logout</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Revokes the refresh token and CSRF tokens. Clears the httpOnly cookie.</div>
+          <button class="btn btn-danger" onclick="doLogout()">Logout</button>
+          <div class="response-box" id="logout-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUBMIT REPORT -->
+    <div id="panel-submit-report" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/reports</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Public endpoint (no auth required). Reports a phishing URL by hash prefix. Nonce and timestamp prevent replay attacks.</div>
+          <div class="form-group">
+            <label>Hash Prefix (8-64 hex chars)</label>
+            <input id="rep-hash" value="abcdef12">
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="rep-category">
+              <option>phishing</option><option>scam</option><option>malware</option><option>other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notes (optional)</label>
+            <textarea id="rep-notes" placeholder="Optional description..."></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="doSubmitReport()">Submit Report</button>
+          <div class="response-box" id="rep-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN REPORTS -->
+    <div id="panel-admin-reports" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>GET /api/reports/admin</h2>
+          <span class="method-badge GET">GET</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn">Requires admin role. Login as an admin user first, or use "Make Admin (Demo)" in the sidebar.</div>
+          <button class="btn btn-primary" onclick="doAdminReports()">Fetch All Reports</button>
+          <div class="response-box" id="adm-rep-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THREAT INTEL UPDATES -->
+    <div id="panel-ti-updates" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>GET /api/threat-intel/updates</h2>
+          <span class="method-badge GET">GET</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Public endpoint. Returns the current threat hash-prefix database. No auth required.</div>
+          <div class="form-group">
+            <label>Since (unix ms, optional)</label>
+            <input id="ti-since" placeholder="leave blank for all" value="">
+          </div>
+          <button class="btn btn-primary" onclick="doTiUpdates()">Get Threat Updates</button>
+          <div class="response-box" id="ti-upd-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THREAT INTEL ADD -->
+    <div id="panel-ti-add" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/threat-intel/entries</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn">Requires admin role + access token + CSRF token.</div>
+          <div class="form-group">
+            <label>Prefix (hex, 8-16 chars)</label>
+            <input id="ti-prefix" value="deadbeef12345678">
+          </div>
+          <div class="form-group">
+            <label>Full Hash (hex, 32-64 chars)</label>
+            <input id="ti-fullhash" value="deadbeef1234567890abcdef1234567890abcdef1234567890abcdef12345678">
+          </div>
+          <div class="form-group">
+            <label>Source</label>
+            <select id="ti-source">
+              <option>Manual</option><option>PhishTank</option><option>OpenPhish</option><option>GoogleSafeBrowsing</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="doTiAdd()">Add Threat Entry</button>
+          <div class="response-box" id="ti-add-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THREAT INTEL REMOVE -->
+    <div id="panel-ti-remove" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>DELETE /api/threat-intel/entries/:prefix</h2>
+          <span class="method-badge DELETE">DELETE</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn">Requires admin role.</div>
+          <div class="form-group">
+            <label>Prefix to remove</label>
+            <input id="ti-del-prefix" value="deadbeef12345678">
+          </div>
+          <button class="btn btn-danger" onclick="doTiRemove()">Remove Entry</button>
+          <div class="response-box" id="ti-del-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- THREAT INTEL AUDIT -->
+    <div id="panel-ti-audit" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>GET /api/threat-intel/audit</h2>
+          <span class="method-badge GET">GET</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn">Requires admin role.</div>
+          <button class="btn btn-primary" onclick="doTiAudit()">Get Audit Status</button>
+          <div class="response-box" id="ti-audit-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- URL ANALYSIS -->
+    <div id="panel-ua-report" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/url-analysis/report</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Public endpoint. Extension sends URL hash prefix + client risk score. Server aggregates and returns a signed verdict.</div>
+          <div class="form-group">
+            <label>Hash Prefix (8-64 hex chars)</label>
+            <input id="ua-hash" value="abcdef12">
+          </div>
+          <div class="form-group">
+            <label>Client Risk Score (0.0 – 1.0)</label>
+            <input id="ua-score" type="number" min="0" max="1" step="0.1" value="0.5">
+          </div>
+          <div class="form-group">
+            <label>Risk Factors (comma-separated)</label>
+            <input id="ua-factors" value="suspicious-domain,no-https">
+          </div>
+          <button class="btn btn-primary" onclick="doUaReport()">Submit Analysis</button>
+          <div class="response-box" id="ua-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- URL ANALYSIS STATS -->
+    <div id="panel-ua-stats" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>GET /api/url-analysis/stats</h2>
+          <span class="method-badge GET">GET</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn">Requires admin role.</div>
+          <button class="btn btn-primary" onclick="doUaStats()">Get Stats</button>
+          <div class="response-box" id="ua-stats-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SESSION REGISTER -->
+    <div id="panel-sess-register" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/sessions/register</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info">Extension registers its HMAC-SHA256 key. The sessionId must be 16-64 hex chars. The key JWK must be a valid HMAC-SHA256 JWK with at least 32 chars of base64url key material.</div>
+          <div class="form-group">
+            <label>Session ID (auto-generated)</label>
+            <input id="sess-id" value="">
+          </div>
+          <button class="btn btn-success" onclick="document.getElementById('sess-id').value = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('')" style="margin-bottom:10px;padding:6px 12px;font-size:.8rem">Generate Session ID</button>
+          <div class="form-group">
+            <label>Key JWK (auto-generated when you click below)</label>
+            <textarea id="sess-jwk" rows="4" placeholder='Click "Generate Key" below'></textarea>
+          </div>
+          <div class="row">
+            <button class="btn btn-success" onclick="generateAndRegisterSession()">Generate Key + Register</button>
+          </div>
+          <div class="response-box" id="sess-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEMO ACTIVATE -->
+    <div id="panel-demo-activate" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>POST /api/auth/demo-activate</h2>
+          <span class="method-badge POST">POST</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn"><strong>Demo mode only!</strong> Activates a user account without email verification. Use this instead of copying the verify token.</div>
+          <div class="form-group">
+            <label>Email to activate</label>
+            <input id="demo-act-email" value="user@example.com">
+          </div>
+          <button class="btn btn-success" onclick="doDemoActivate()">Activate Account</button>
+          <div class="response-box" id="demo-act-result"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DEMO ADMIN -->
+    <div id="panel-demo-admin" class="panel" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <h2>🔧 Make Admin (Demo Utility)</h2>
+          <span class="method-badge POST">UTILITY</span>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-warn">
+            <strong>Important:</strong> The backend has no built-in "make admin" endpoint — roles are assigned server-side only. To test admin endpoints you need to:<br><br>
+            1. Register + activate a user<br>
+            2. Stop the server<br>
+            3. Start it with the user's userId and manually set role in memory (or use the helper below to show instructions)
+          </div>
+          <div class="alert alert-info">
+            <strong>Quick workaround for testing:</strong> Start your server with a seeded admin user by running the quick-start script (see below). Or restart the server process and register as <code>admin@catphish.local</code> — the server auto-seeds this account in demo mode after the fix.
+          </div>
+          <p style="font-size:.83rem;color:#94a3b8;margin-bottom:12px">Current session role: <span id="curr-role-display" style="color:#a78bfa;font-weight:600">—</span></p>
+          <button class="btn btn-primary" onclick="showAdminInstructions()">Show Admin Setup Instructions</button>
+          <div class="response-box" id="demo-admin-result"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+</main>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  accessToken: null,
+  csrfToken:   null,
+  role:        null,
+};
+
+function base() { return document.getElementById('baseUrl-input').value.replace(/\/$/, ''); }
+
+// ============================================================
+// FETCH HELPER
+// ============================================================
+async function api(method, path, body, auth=false) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (auth && state.accessToken) headers['Authorization'] = 'Bearer ' + state.accessToken;
+  if (auth && state.csrfToken && ['POST','PUT','PATCH','DELETE'].includes(method))
+    headers['X-CSRF-Token'] = state.csrfToken;
+
+  const opts = { method, headers, credentials: 'include' };
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch(base() + path, opts);
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = { _raw: text }; }
+  return { status: res.status, data };
+}
+
+// ============================================================
+// DISPLAY HELPER
+// ============================================================
+function showResult(id, status, data) {
+  const el = document.getElementById(id);
+  const cls = status >= 200 && status < 300 ? 'success' : status >= 400 ? 'error' : 'info';
+  el.innerHTML = `<h3>Response (HTTP ${status})</h3><pre class="response-pre ${cls}">${JSON.stringify(data, null, 2)}</pre>`;
+}
+
+// ============================================================
+// STATUS BAR
+// ============================================================
+function updateStatusBar() {
+  const auth = document.getElementById('stat-auth');
+  const role = document.getElementById('stat-role');
+  const csrf = document.getElementById('stat-csrf');
+  if (state.accessToken) {
+    auth.textContent = '⬤ Logged in';
+    auth.className = 'pill ok';
+  } else {
+    auth.textContent = '⬤ Not logged in';
+    auth.className = 'pill err';
+  }
+  role.textContent = 'Role: ' + (state.role || '—');
+  role.className = state.role === 'admin' ? 'pill ok' : 'pill';
+  csrf.textContent = 'CSRF: ' + (state.csrfToken ? '✓ Set' : '—');
+  csrf.className = state.csrfToken ? 'pill ok' : 'pill';
+  document.getElementById('curr-role-display').textContent = state.role || '—';
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showPanel(name) {
+  document.querySelectorAll('.panel').forEach(p => p.style.display = 'none');
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).style.display = '';
+  const navBtn = document.getElementById('nav-' + name);
+  if (navBtn) navBtn.classList.add('active');
+}
+
+// ============================================================
+// HEALTH
+// ============================================================
+async function checkHealth() {
+  try {
+    const r = await api('GET', '/api/health');
+    const el = document.getElementById('stat-health');
+    if (r.status === 200) {
+      el.textContent = `⬤ Server OK (v${r.data.version})`;
+      el.className = 'pill ok';
+    } else {
+      el.textContent = '⬤ Server Error';
+      el.className = 'pill err';
+    }
+  } catch {
+    document.getElementById('stat-health').textContent = '⬤ Server Unreachable';
+    document.getElementById('stat-health').className = 'pill err';
+  }
+}
+
+// ============================================================
+// AUTH ENDPOINTS
+// ============================================================
+async function doRegister() {
+  const email    = document.getElementById('reg-email').value;
+  const password = document.getElementById('reg-password').value;
+  const r = await api('POST', '/api/auth/register', { email, password });
+  showResult('reg-result', r.status, r.data);
+  // Auto-fill verify form
+  if (r.data._demoVerifyToken) {
+    document.getElementById('ver-email').value = email;
+    document.getElementById('ver-token').value = r.data._demoVerifyToken;
+    document.getElementById('demo-act-email').value = email;
+    document.getElementById('login-email').value = email;
+  }
+}
+
+async function doVerify() {
+  const email = document.getElementById('ver-email').value;
+  const token = document.getElementById('ver-token').value;
+  const r = await api('POST', '/api/auth/verify-email', { email, token });
+  showResult('ver-result', r.status, r.data);
+}
+
+async function doLogin() {
+  const email    = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  const r = await api('POST', '/api/auth/login', { email, password });
+  showResult('login-result', r.status, r.data);
+  if (r.data.success) {
+    state.accessToken = r.data.accessToken;
+    state.csrfToken   = r.data.csrfToken;
+    state.role        = r.data.role;
+    updateStatusBar();
+  }
+}
+
+async function doGetMe() {
+  const r = await api('GET', '/api/auth/me', null, true);
+  showResult('me-result', r.status, r.data);
+}
+
+async function doChangePassword() {
+  const currentPassword = document.getElementById('cp-current').value;
+  const newPassword     = document.getElementById('cp-new').value;
+  const r = await api('POST', '/api/auth/change-password', { currentPassword, newPassword }, true);
+  showResult('cp-result', r.status, r.data);
+  if (r.data.success) {
+    // Password changed → session invalidated → clear tokens
+    state.accessToken = null;
+    state.csrfToken   = null;
+    state.role        = null;
+    updateStatusBar();
+    document.getElementById('cp-result').innerHTML += '<p style="color:#fbbf24;margin-top:8px;font-size:.82rem">⚠️ Session cleared — please log in again with the new password.</p>';
+  }
+}
+
+async function doRefresh() {
+  const r = await api('POST', '/api/auth/refresh', null, false);
+  showResult('refresh-result', r.status, r.data);
+  if (r.data.success) {
+    state.accessToken = r.data.accessToken;
+    updateStatusBar();
+  }
+}
+
+async function doLogout() {
+  const r = await api('POST', '/api/auth/logout', null, true);
+  showResult('logout-result', r.status, r.data);
+  state.accessToken = null;
+  state.csrfToken   = null;
+  state.role        = null;
+  updateStatusBar();
+}
+
+// ============================================================
+// REPORTS
+// ============================================================
+async function doSubmitReport() {
+  const body = {
+    hashPrefix: document.getElementById('rep-hash').value,
+    category:   document.getElementById('rep-category').value,
+    notes:      document.getElementById('rep-notes').value,
+    nonce:      Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join(''),
+    ts:         Date.now(),
+    sessionId:  '',
+    sig:        ''
+  };
+  const r = await api('POST', '/api/reports', body);
+  showResult('rep-result', r.status, r.data);
+}
+
+async function doAdminReports() {
+  const r = await api('GET', '/api/reports/admin', null, true);
+  showResult('adm-rep-result', r.status, r.data);
+}
+
+// ============================================================
+// THREAT INTEL
+// ============================================================
+async function doTiUpdates() {
+  const since = document.getElementById('ti-since').value;
+  const qs = since ? '?since=' + encodeURIComponent(since) : '';
+  const r = await api('GET', '/api/threat-intel/updates' + qs);
+  showResult('ti-upd-result', r.status, r.data);
+}
+
+async function doTiAdd() {
+  const body = {
+    prefix:   document.getElementById('ti-prefix').value,
+    fullHash: document.getElementById('ti-fullhash').value,
+    source:   document.getElementById('ti-source').value,
+  };
+  const r = await api('POST', '/api/threat-intel/entries', body, true);
+  showResult('ti-add-result', r.status, r.data);
+}
+
+async function doTiRemove() {
+  const prefix = document.getElementById('ti-del-prefix').value;
+  const r = await api('DELETE', `/api/threat-intel/entries/${encodeURIComponent(prefix)}`, null, true);
+  showResult('ti-del-result', r.status, r.data);
+}
+
+async function doTiAudit() {
+  const r = await api('GET', '/api/threat-intel/audit', null, true);
+  showResult('ti-audit-result', r.status, r.data);
+}
+
+// ============================================================
+// URL ANALYSIS
+// ============================================================
+async function doUaReport() {
+  const factors = document.getElementById('ua-factors').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const body = {
+    hashPrefix:      document.getElementById('ua-hash').value,
+    clientRiskScore: parseFloat(document.getElementById('ua-score').value),
+    riskFactors:     factors,
+    timestamp:       Date.now()
+  };
+  const r = await api('POST', '/api/url-analysis/report', body);
+  showResult('ua-result', r.status, r.data);
+}
+
+async function doUaStats() {
+  const r = await api('GET', '/api/url-analysis/stats', null, true);
+  showResult('ua-stats-result', r.status, r.data);
+}
+
+// ============================================================
+// SESSIONS
+// ============================================================
+async function generateAndRegisterSession() {
+  let sessionId = document.getElementById('sess-id').value;
+  if (!sessionId) {
+    sessionId = Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b=>b.toString(16).padStart(2,'0')).join('');
+    document.getElementById('sess-id').value = sessionId;
+  }
+
+  // Generate a real HMAC-SHA256 key
+  const key = await crypto.subtle.generateKey({ name:'HMAC', hash:'SHA-256' }, true, ['sign','verify']);
+  const jwk = await crypto.subtle.exportKey('jwk', key);
+  document.getElementById('sess-jwk').value = JSON.stringify(jwk, null, 2);
+
+  const r = await api('POST', '/api/sessions/register', { sessionId, keyJwk: jwk });
+  showResult('sess-result', r.status, r.data);
+}
+
+// ============================================================
+// DEMO ACTIVATE
+// ============================================================
+async function doDemoActivate() {
+  const email = document.getElementById('demo-act-email').value;
+  const r = await api('POST', '/api/auth/demo-activate', { email });
+  showResult('demo-act-result', r.status, r.data);
+  if (r.status === 200) {
+    document.getElementById('login-email').value = email;
+  }
+}
+
+// ============================================================
+// ADMIN INSTRUCTIONS
+// ============================================================
+function showAdminInstructions() {
+  const html = `
+<h3>How to test admin endpoints</h3>
+<pre class="response-pre info">
+OPTION A — Register + auto-promote via server seeding:
+  The fixed server.js seeds an admin user in DEMO_MODE:
+    Email:    admin@catphish.local
+    Password: Admin1234!
+  Just login with these credentials to get admin role.
+
+OPTION B — Promote any user at runtime (Node REPL):
+  While server is running, attach to the process and
+  call userRepo.users to find the userId, then update
+  the role field:
+    const u = [...userRepo.users.values()].find(u => u.email === 'you@x.com');
+    u.role = 'admin';
+
+OPTION C — Use ALLOWED_ORIGINS and an HTTP proxy to
+  intercept and edit the JWT payload (for pen-testing).
+</pre>`;
+  document.getElementById('demo-admin-result').innerHTML = html;
+}
+
+// ============================================================
+// INIT
+// ============================================================
+showPanel('register');
+checkHealth();
+updateStatusBar();
+</script>
+</body>
+</html>

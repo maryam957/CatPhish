@@ -1,0 +1,37 @@
+{
+  "users": [
+    {
+      "id": "df1fea9c74dbe5786c240f00a70d694d",
+      "email": "admin@catphish.local",
+      "passwordHash": "scrypt$16384$8$1$f1bfcf7c3b8b8c48f323968096911f701203e618ebb2265e3a3f6fe15fb47e72$e1c4899cfa03378643b9ab3195ab39cf7de1da75009a8087959fceefe10c7b3444b66e054fc15a3ef23d2b5e6e8516a4ff96ab6ab5450752c5af7b8c79717ac1",
+      "role": "admin",
+      "createdAt": "2026-04-25T19:04:46.223Z",
+      "isActive": true,
+      "isLocked": false,
+      "failedAttempts": 0,
+      "lastLogin": null
+    },
+    {
+      "id": "497ff25e8872fc8cd4d02ff7edf06351",
+      "email": "aabishnk@gmail.com",
+      "passwordHash": "scrypt$16384$8$1$97ee85e60b78f96efae6a17d7414ba04ff707e8ab6f2e873160812b3de5456dd$d8cf2e7a315c126252634d39a27867e6458351c9012086f3324aaaf1d35588becaa9a0ace272502bd2a45baa874daf65a53de611aee47447216a4bbcf2bf0c10",
+      "role": "user",
+      "createdAt": "2026-04-25T19:07:33.370Z",
+      "isActive": true,
+      "isLocked": false,
+      "failedAttempts": 0,
+      "lastLogin": "2026-04-25T19:14:20.331Z"
+    },
+    {
+      "id": "6cb33c9af518de0788508beadcb6695d",
+      "email": "maryam987@gmail.com",
+      "passwordHash": "scrypt$16384$8$1$03ea4775b6db836d36127cd138579762cacc72eca861dc2b3fa855c8742b6586$f595d9c9c6d513edb6b85bfd97175f5bb47b8b16c4fdb05388cdf6007633177a03df65fbfb630ea577244eb05b7de4798a117abcd70869af784224a1cfad8cff",
+      "role": "user",
+      "createdAt": "2026-04-25T19:24:23.962Z",
+      "isActive": true,
+      "isLocked": false,
+      "failedAttempts": 0,
+      "lastLogin": "2026-04-25T19:24:39.720Z"
+    }
+  ]
+}

@@ -20,6 +20,7 @@
   function el(id) { return document.getElementById(id); }
   function setText(id, v) { var n = el(id); if (n) n.textContent = v == null ? '' : String(v); }
   function getInput(id) { var n = el(id); return n ? String(n.value || '').trim() : ''; }
+  function clearInput(id) { var n = el(id); if (n) n.value = ''; }
 
   // ---- Load settings from service worker ---------------------------------
 
@@ -221,6 +222,8 @@
       var response = await apiCall('/auth/register', 'POST', { email: email, password: password }, null);
       // Demo mode helper: activate immediately if enabled server-side.
       await apiCall('/auth/demo-activate', 'POST', { email: email }, null).catch(function () {});
+      clearInput('registerEmail');
+      clearInput('registerPassword');
       writeAuthStatus(response && response.message ? response.message : 'Registration request submitted.');
     } catch (err) {
       writeAuthStatus(err.message || 'Registration failed.');
@@ -246,6 +249,8 @@
         role: String(data.role || 'user'),
         email: email
       });
+      clearInput('loginEmail');
+      clearInput('loginPassword');
       writeAuthStatus('Login successful.');
       await refreshAuthStatus();
     } catch (err) {

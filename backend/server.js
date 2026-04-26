@@ -81,18 +81,41 @@ app.set('trust proxy', 1);
 // SECURITY: helmet sets security headers on every response
 app.use(helmet({
   contentSecurityPolicy: {
-    directives: { defaultSrc: ["'none'"], connectSrc: ["'self'"] }
+    directives: {
+      defaultSrc: ["'self'"],
+
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'unsafe-inline'"],
+
+      styleSrc: ["'self'", "'unsafe-inline'"],
+
+      connectSrc: ["'self'", "http://localhost:3031", "http://127.0.0.1:3031"],
+
+      imgSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"]
+    }
   }
 }));
 
 // SECURITY: CORS — Chrome extensions + localhost only
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',').map((s) => s.trim()).filter(Boolean)
-  .concat(['http://localhost:3030', 'http://127.0.0.1:3030']);
+  .concat([
+    'http://localhost:3030', 'http://127.0.0.1:3030',
+    'http://localhost:3031', 'http://127.0.0.1:3031',
+    'http://localhost:3032', 'http://127.0.0.1:3032',
+    'http://localhost:8080', 'http://127.0.0.1:8080',
+    'http://localhost:5500', 'http://127.0.0.1:5500'
+  ]);
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin) || /^chrome-extension:\/\//.test(origin)) {
+    // Allow requests with no origin (curl, Postman, file:// opened test pages)
+    // and known local origins / Chrome extensions.
+    if (!origin ||
+        allowedOrigins.includes(origin) ||
+        /^chrome-extension:\/\//.test(origin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
       cb(null, true);
     } else {
       cb(new Error('CORS: origin not allowed'));
@@ -149,6 +172,21 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ---- Serve test frontend in DEMO mode ------------------------------------
+if (process.env.CATPHISH_DEMO_MODE === 'true') {
+  const fs = require('fs');
+  app.get('/test', (req, res) => {
+    const p = path.join(__dirname, 'test_frontend.html');
+    if (fs.existsSync(p)) {
+      res.setHeader('Content-Type', 'text/html');
+      res.send(fs.readFileSync(p, 'utf8'));
+    } else {
+      res.status(404).send('test_frontend.html not found — place it in backend/');
+    }
+  });
+  console.warn('[CatPhish] DEMO MODE — test UI available at http://localhost:' + PORT + '/test');
+}
+
 // ---- Root route ----------------------------------------------------------
 app.get('/', (req, res) => {
   res.json({ ok: true, message: 'CatPhish API server is running.', docs: '/api/health' });
@@ -183,6 +221,32 @@ if (process.env.CATPHISH_DEMO_MODE === 'true') {
 }
 
 // ---- Start ---------------------------------------------------------------
+// ---- DEMO MODE: seed an admin user for testing admin-only endpoints ----
+if (process.env.CATPHISH_DEMO_MODE === 'true') {
+  (async () => {
+    try {
+      const adminEmail = 'admin@catphish.local';
+      const existing   = await userRepo.findByEmail(adminEmail);
+      if (!existing) {
+        const pwHash = await passwordUtils.hashPassword('Admin1234!');
+        const admin  = await userRepo.create({
+          email:          adminEmail,
+          passwordHash:   pwHash,
+          role:           'admin',
+          createdAt:      new Date(),
+          isActive:       true,   // pre-activated
+          isLocked:       false,
+          failedAttempts: 0,
+          lastLogin:      null
+        });
+        console.warn('[CatPhish][DEMO] Seeded admin user:', adminEmail, '/ Admin1234!');
+      }
+    } catch (err) {
+      console.warn('[CatPhish][DEMO] Could not seed admin user:', err.message);
+    }
+  })();
+}
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`[CatPhish] Backend listening on http://0.0.0.0:${PORT}`);
   auditLog.append({ type: 'SERVER_STARTED', port: String(PORT) });

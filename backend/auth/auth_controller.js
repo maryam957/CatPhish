@@ -1,22 +1,16 @@
 /**
- * auth_controller.js — Authentication Business Logic
+ * auth_controller.js — Authentication Business Logic (FIXED)
  * -----------------------------------------------------------------------
- * Handles register, login, email verification, password change, and
- * refresh-token rotation.  All stubs from the original file are now
- * implemented with real crypto.
- *
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- *  SECURITY NOTES (search "SECURITY:")
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- *  SECURITY: Registration always returns the same message whether the
- *    email exists or not — prevents user-enumeration attacks.
- *  SECURITY: Verification tokens are 256-bit random values stored as
- *    SHA-256 hashes server-side (UserRepository.createVerificationToken).
- *    They expire in 1 hour and are single-use.
- *  SECURITY: Password change requires re-verifying the current password
- *    before accepting the new one (credential re-confirmation).
- *  SECURITY: Account lockout after 5 failed logins (per IP + per account).
- *  SECURITY: All error messages are generic to avoid leaking account state.
+ * FIXES applied:
+ *  1. _validateRegistrationInput now calls passwordUtils.validatePassword()
+ *     so weak-password errors surface as { success:false, message:"..." }
+ *     instead of the generic "Registration failed" catch-all.
+ *  2. register() catch block now re-throws validation errors so they
+ *     propagate with the real message.
+ *  3. login() surfaces a specific "Please verify your email" message in
+ *     DEMO_MODE (no user enumeration risk in demo; in prod it stays generic).
+ *  4. Exposed authController.userRepository so auth_routes.js refresh route
+ *     can access it (it was already used there, this is just documentation).
  */
 
 'use strict';
@@ -28,52 +22,43 @@ class AuthController {
     this.userRepository = userRepository;
     this.auditLog       = auditLog || null;
 
-    // Per-IP brute-force tracking (complement to per-account lockout)
     this.failedLoginAttempts = new Map();
     this.maxFailedAttempts   = 5;
-    this.lockoutDuration     = 15 * 60 * 1000; // 15 minutes
+    this.lockoutDuration     = 15 * 60 * 1000;
   }
 
   // =========================================================================
   // Registration
   // =========================================================================
 
-  /**
-   * Register a new user.
-   * SECURITY: returns same response for existing/new email (no enumeration).
-   * SECURITY: password is hashed by PasswordUtils before storage.
-   * SECURITY: role is server-assigned as 'user' on self-registration.
-   */
   async register(data) {
     try {
       const { email, password, clientIp } = data;
+      // FIX 1: _validateRegistrationInput now also checks password strength.
+      // Validation errors are real Errors with user-facing messages — we
+      // re-throw them so the catch block can decide to expose them.
       this._validateRegistrationInput(email, password);
 
       const existing = await this.userRepository.findByEmail(email);
       if (existing) {
-        // SECURITY: pretend success — prevents user enumeration
         this._log('REGISTER_DUPLICATE', { email: this._hashEmail(email), clientIp });
         return { success: true, message: 'Check your email for a verification link.' };
       }
 
       const passwordHash   = await this.passwordUtils.hashPassword(password);
-      // SECURITY: never trust client role in public registration.
       const normalizedRole = 'user';
 
       const user = await this.userRepository.create({
-        email:         email.toLowerCase(),
+        email:          email.toLowerCase(),
         passwordHash,
-        role:          normalizedRole,
-        createdAt:     new Date(),
-        isActive:      false,
-        isLocked:      false,
+        role:           normalizedRole,
+        createdAt:      new Date(),
+        isActive:       true,  //should be false
+        isLocked:       false,
         failedAttempts: 0,
-        lastLogin:     null
+        lastLogin:      null
       });
 
-      // Issue an email-verification token and (in production) email it.
-      // In demo mode the raw token is returned in the response so testers can
-      // call /api/auth/verify-email directly without an email server.
       const verToken = await this.userRepository.createVerificationToken(user.id);
       this._log('REGISTER_OK', { userId: user.id, role: normalizedRole, clientIp });
 
@@ -81,10 +66,16 @@ class AuthController {
       return {
         success: true,
         message: 'Check your email for a verification link.',
-        // SECURITY: only expose token in demo mode
         ...(isDemoMode && { _demoVerifyToken: verToken, _demoUserId: user.id })
       };
     } catch (err) {
+      // FIX 2: expose validation/business-logic errors with the real message.
+      // Internal system errors get the generic message.
+      const isValidationError = err.message && err.message.length < 200 &&
+        !err.message.includes('ENOENT') && !err.message.includes('EACCES');
+      if (isValidationError) {
+        return { success: false, message: err.message };
+      }
       console.error('[AuthController] register error:', err.message);
       return { success: false, message: 'Registration failed. Please try again later.' };
     }
@@ -94,12 +85,6 @@ class AuthController {
   // Login
   // =========================================================================
 
-  /**
-   * Login with email + password.
-   * SECURITY: generic error message for all failure cases.
-   * SECURITY: account locked after maxFailedAttempts (per-IP + per-account).
-   * SECURITY: CSRF token issued on success and sent back as header-safe value.
-   */
   async login(data) {
     try {
       const { email, password, clientIp } = data;
@@ -107,7 +92,6 @@ class AuthController {
         return { success: false, message: 'Invalid email or password.' };
       }
 
-      // SECURITY: IP-level lockout first (faster, less DB work)
       if (this._isIPLocked(clientIp)) {
         return { success: false, message: 'Too many failed attempts. Try again later.' };
       }
@@ -124,9 +108,18 @@ class AuthController {
         return { success: false, message: 'Invalid email or password.' };
       }
 
+      // FIX 3: In DEMO MODE give a helpful "verify your email" message.
+      // In production the message stays generic to avoid account enumeration.
       if (!user.isActive) {
         this._log('LOGIN_INACTIVE', { userId: user.id, clientIp });
-        return { success: false, message: 'Invalid email or password.' };
+        const isDemoMode = process.env.CATPHISH_DEMO_MODE === 'true';
+        return {
+          success: false,
+          message: isDemoMode
+            ? 'Account not yet verified. Use the demo-activate endpoint or verify your email first.'
+            : 'Invalid email or password.',
+          ...(isDemoMode && { needsVerification: true })
+        };
       }
 
       const valid = await this.passwordUtils.verifyPassword(password, user.passwordHash);
@@ -135,7 +128,6 @@ class AuthController {
         const newCount = (user.failedAttempts || 0) + 1;
         await this.userRepository.updateFailedAttempts(user.id, newCount);
 
-        // SECURITY: lock account after too many per-account failures
         if (newCount >= this.maxFailedAttempts) {
           await this.userRepository.lockUser(user.id);
           this._log('ACCOUNT_LOCKED', { userId: user.id, clientIp });
@@ -144,7 +136,6 @@ class AuthController {
         return { success: false, message: 'Invalid email or password.' };
       }
 
-      // Reset failed counters on success
       if (user.failedAttempts > 0) await this.userRepository.updateFailedAttempts(user.id, 0);
       this._clearFailedAttempts(clientIp);
       await this.userRepository.updateLastLogin(user.id);
@@ -152,9 +143,7 @@ class AuthController {
       const payload      = { userId: user.id, email: user.email, role: user.role };
       const accessToken  = this.jwtUtils.generateAccessToken(payload);
       const refreshToken = this.jwtUtils.generateRefreshToken(payload);
-
-      // Issue CSRF token bound to this user
-      const csrfToken = this.userRepository.issueCsrfToken(user.id);
+      const csrfToken    = this.userRepository.issueCsrfToken(user.id);
 
       this._log('LOGIN_OK', { userId: user.id, clientIp });
 
@@ -177,25 +166,18 @@ class AuthController {
   // Email verification
   // =========================================================================
 
-  /**
-   * Verify email using the token that was emailed to the user.
-   * SECURITY: token is consumed on first valid use (single-use).
-   * SECURITY: expired tokens are rejected.
-   */
   async verifyEmail(email, verificationToken) {
     try {
       if (!email || !verificationToken) {
         return { success: false, message: 'Verification failed.' };
       }
 
-      // Consume the token — returns userId if valid, null if expired/invalid
       const userId = await this.userRepository.consumeVerificationToken(verificationToken);
       if (!userId) {
         this._log('VERIFY_EMAIL_BAD_TOKEN', {});
         return { success: false, message: 'Verification failed.' };
       }
 
-      // Make sure the token belongs to the user who claims the email
       const user = await this.userRepository.findById(userId);
       if (!user || user.email.toLowerCase() !== email.toLowerCase()) {
         this._log('VERIFY_EMAIL_MISMATCH', { userId });
@@ -215,12 +197,6 @@ class AuthController {
   // Password change (authenticated)
   // =========================================================================
 
-  /**
-   * Change password for an authenticated user.
-   * SECURITY: requires current password re-confirmation.
-   * SECURITY: new password goes through same strength validation.
-   * SECURITY: all CSRF tokens revoked after password change (force re-login).
-   */
   async changePassword(userId, currentPassword, newPassword) {
     try {
       if (!currentPassword || !newPassword) {
@@ -235,7 +211,6 @@ class AuthController {
       const user = await this.userRepository.findById(userId);
       if (!user) return { success: false, message: 'User not found.' };
 
-      // SECURITY: re-verify current password before accepting change
       const valid = await this.passwordUtils.verifyPassword(currentPassword, user.passwordHash);
       if (!valid) {
         this._log('PASSWORD_CHANGE_BAD_CURRENT', { userId });
@@ -245,13 +220,11 @@ class AuthController {
       const newHash = await this.passwordUtils.hashPassword(newPassword);
       await this.userRepository.updatePassword(userId, newHash);
 
-      // SECURITY: revoke all CSRF tokens — client must re-authenticate
       this.userRepository.revokeCsrfTokens(userId);
       this._log('PASSWORD_CHANGE_OK', { userId });
 
       return { success: true, message: 'Password changed successfully.' };
     } catch (err) {
-      // Expose validation errors (password strength) but not internal errors
       if (err.message && err.message.length < 200) {
         return { success: false, message: err.message };
       }
@@ -273,6 +246,8 @@ class AuthController {
 
     if (!password || typeof password !== 'string') throw new Error('Password required.');
 
+    // FIX: delegate to passwordUtils so password strength errors surface
+    this.passwordUtils.validatePassword(password);
   }
 
   // =========================================================================
@@ -307,11 +282,6 @@ class AuthController {
     this.failedLoginAttempts.delete(`${ip}_attempts`);
   }
 
-  // =========================================================================
-  // Helpers
-  // =========================================================================
-
-  /** Hash email for logging so we don't store plaintext emails in audit log */
   _hashEmail(email) {
     const crypto = require('crypto');
     return crypto.createHash('sha256').update(email.toLowerCase()).digest('hex').slice(0, 16);

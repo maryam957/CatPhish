@@ -6,9 +6,9 @@
     "addedAt": 0
   },
   {
-    "prefix": "a1b2c3d4e5f60718",
-    "fullHash": "a1b2c3d4e5f607182839405162738495a6b7c8d9e0f1a2b3c4d5e6f708192a3b4",
-    "source": "OpenPhish",
-    "addedAt": 0
+    "prefix": "deadbeef12345678",
+    "fullHash": "deadbeef1234567890abcdef1234567890abcdef1234567890abcdef12345678",
+    "source": "Manual",
+    "addedAt": 1777132440636
   }
 ]

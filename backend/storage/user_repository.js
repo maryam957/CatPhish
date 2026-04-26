@@ -13,6 +13,8 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 class UserRepository {
   constructor() {
@@ -20,6 +22,10 @@ class UserRepository {
     this.byEmail     = new Map(); // email    -> id
     this.verTokens   = new Map(); // tokenHex -> { userId, expiry }
     this.csrfTokens  = new Map(); // userId   -> Set<csrfToken>
+
+    this.dataDir = path.join(__dirname, '..', 'data');
+    this.dataFile = path.join(this.dataDir, 'users.json');
+    this._loadFromDisk();
   }
 
   // ---- Core CRUD ---------------------------------------------------------
@@ -30,6 +36,7 @@ class UserRepository {
     const user = { id, ...userData };
     this.users.set(id, user);
     this.byEmail.set(user.email.toLowerCase(), id);
+    this._persistToDisk();
     return user;
   }
 
@@ -45,22 +52,34 @@ class UserRepository {
 
   async updateFailedAttempts(id, count) {
     const u = this.users.get(id);
-    if (u) u.failedAttempts = count;
+    if (u) {
+      u.failedAttempts = count;
+      this._persistToDisk();
+    }
   }
 
   async updateLastLogin(id) {
     const u = this.users.get(id);
-    if (u) u.lastLogin = new Date();
+    if (u) {
+      u.lastLogin = new Date();
+      this._persistToDisk();
+    }
   }
 
   async activateUser(id) {
     const u = this.users.get(id);
-    if (u) u.isActive = true;
+    if (u) {
+      u.isActive = true;
+      this._persistToDisk();
+    }
   }
 
   async lockUser(id) {
     const u = this.users.get(id);
-    if (u) u.isLocked = true;
+    if (u) {
+      u.isLocked = true;
+      this._persistToDisk();
+    }
   }
 
   // ---- Password management -----------------------------------------------
@@ -74,6 +93,7 @@ class UserRepository {
     if (!u) throw new Error('User not found');
     u.passwordHash = newPasswordHash;
     u.passwordChangedAt = new Date();
+    this._persistToDisk();
   }
 
   // ---- Email verification tokens -----------------------------------------
@@ -152,6 +172,51 @@ class UserRepository {
 
   revokeCsrfTokens(userId) {
     this.csrfTokens.delete(userId);
+  }
+
+  // ---- Disk persistence ---------------------------------------------------
+
+  _loadFromDisk() {
+    try {
+      if (!fs.existsSync(this.dataDir)) {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+      }
+      if (!fs.existsSync(this.dataFile)) {
+        return;
+      }
+
+      const raw = fs.readFileSync(this.dataFile, 'utf8');
+      if (!raw || !raw.trim()) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      const users = Array.isArray(parsed.users) ? parsed.users : [];
+      for (const u of users) {
+        if (!u || !u.id || !u.email) continue;
+        this.users.set(u.id, { ...u });
+        this.byEmail.set(String(u.email).toLowerCase(), u.id);
+      }
+    } catch (err) {
+      console.error('[UserRepository] Failed loading users from disk:', err.message);
+    }
+  }
+
+  _persistToDisk() {
+    try {
+      if (!fs.existsSync(this.dataDir)) {
+        fs.mkdirSync(this.dataDir, { recursive: true });
+      }
+
+      const payload = {
+        users: Array.from(this.users.values())
+      };
+      const tmp = `${this.dataFile}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(payload, null, 2), 'utf8');
+      fs.renameSync(tmp, this.dataFile);
+    } catch (err) {
+      console.error('[UserRepository] Failed persisting users to disk:', err.message);
+    }
   }
 }
 
