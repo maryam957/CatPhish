@@ -202,7 +202,9 @@ class AuthController {
       if (!currentPassword || !newPassword) {
         return { success: false, message: 'Both current and new passwords are required.' };
       }
-      if (currentPassword === newPassword) {
+      const actual = crypto.createHash('sha256').update(currentPassword).digest();
+      const expected = crypto.createHash('sha256').update(newPassword).digest();
+      if (crypto.timingSafeEqual(actual, expected)) {
         return { success: false, message: 'New password must differ from current password.' };
       }
 
